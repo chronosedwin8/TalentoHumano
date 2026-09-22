@@ -1,0 +1,85 @@
+import { z } from 'zod';
+
+const bool = (def: boolean) =>
+  z
+    .union([z.boolean(), z.string()])
+    .default(def)
+    .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())));
+
+export const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  API_PORT: z.coerce.number().int().default(3000),
+  API_PREFIX: z.string().default('api'),
+  APP_NAME: z.string().default('TALENTO'),
+  WEB_URL: z.string().default('http://localhost:5173'),
+  API_URL: z.string().default('http://localhost:3000'),
+  CORS_ORIGINS: z.string().default('http://localhost:5173'),
+
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL es obligatorio'),
+  DATABASE_URL_TEST: z.string().optional(),
+
+  JWT_ACCESS_SECRET: z.string().min(16),
+  JWT_REFRESH_SECRET: z.string().min(16),
+  JWT_ACCESS_TTL: z.string().default('15m'),
+  JWT_REFRESH_TTL: z.string().default('30d'),
+  ENCRYPTION_KEY: z.string().min(32),
+  COOKIE_SECRET: z.string().min(8).default('talento-cookie-secret'),
+  COOKIE_DOMAIN: z.string().optional().default(''),
+  COOKIE_SECURE: bool(false),
+  MAX_LOGIN_ATTEMPTS: z.coerce.number().int().default(5),
+  LOCKOUT_MINUTES: z.coerce.number().int().default(15),
+  THROTTLE_TTL: z.coerce.number().int().default(60),
+  THROTTLE_LIMIT: z.coerce.number().int().default(300),
+
+  REDIS_ENABLED: bool(false),
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  STORAGE_LOCAL_PATH: z.string().default('./storage'),
+  S3_ENDPOINT: z.string().optional().default(''),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_BUCKET: z.string().default('talento'),
+  S3_ACCESS_KEY: z.string().optional().default(''),
+  S3_SECRET_KEY: z.string().optional().default(''),
+  S3_FORCE_PATH_STYLE: bool(true),
+  MAX_UPLOAD_MB: z.coerce.number().int().default(50),
+
+  MAIL_DRIVER: z.enum(['log', 'smtp']).default('log'),
+  MAIL_FROM: z.string().default('TALENTO <no-reply@talento.local>'),
+  SMTP_HOST: z.string().optional().default(''),
+  SMTP_PORT: z.coerce.number().int().default(587),
+  SMTP_SECURE: bool(false),
+  SMTP_USER: z.string().optional().default(''),
+  SMTP_PASS: z.string().optional().default(''),
+
+  SSO_GOOGLE_ENABLED: bool(false),
+  SSO_GOOGLE_CLIENT_ID: z.string().optional().default(''),
+  SSO_GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
+  SSO_MICROSOFT_ENABLED: bool(false),
+  SSO_MICROSOFT_CLIENT_ID: z.string().optional().default(''),
+  SSO_MICROSOFT_CLIENT_SECRET: z.string().optional().default(''),
+  SSO_MICROSOFT_TENANT: z.string().default('common'),
+
+  LOG_LEVEL: z.string().default('info'),
+  SENTRY_DSN: z.string().optional().default(''),
+  METRICS_ENABLED: bool(true),
+
+  CANDIDATE_RETENTION_MONTHS: z.coerce.number().int().default(12),
+  AUDIT_RETENTION_MONTHS: z.coerce.number().int().default(60),
+  DEMO_PASSWORD: z.string().default('Demo1234!'),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+export function validateEnv(config: Record<string, unknown>): Env {
+  const parsed = envSchema.safeParse(config);
+  if (!parsed.success) {
+    const details = parsed.error.issues
+      .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
+      .join('\n');
+    throw new Error(`Configuracion de entorno invalida:\n${details}`);
+  }
+  return parsed.data;
+}
+
+export default (): { env: Env } => ({ env: validateEnv(process.env) });

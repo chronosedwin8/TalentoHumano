@@ -1,0 +1,32 @@
+{
+  "name": "talento",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TALENTO - Plataforma de Gestion de Recursos Humanos (HRIS + ATS + LMS + Portal del Empleado)",
+  "author": "Edwin Ortiz Herazo",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=22" },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel --filter \"./apps/**\" dev",
+    "dev:api": "pnpm --filter @talento/api dev",
+    "dev:web": "pnpm --filter @talento/web dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @talento/api test:e2e",
+    "db:generate": "pnpm --filter @talento/api prisma:generate",
+    "db:migrate": "pnpm --filter @talento/api prisma:migrate",
+    "db:push": "pnpm --filter @talento/api prisma:push",
+    "db:studio": "pnpm --filter @talento/api prisma:studio",
+    "seed": "pnpm --filter @talento/api seed",
+    "seed:demo": "pnpm --filter @talento/api seed:demo",
+    "prepare": "husky || true"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

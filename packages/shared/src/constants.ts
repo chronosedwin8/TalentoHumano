@@ -1,0 +1,233 @@
+/** Stable business error codes returned in `{ code }` by the API. */
+export const ERROR_CODES = {
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
+  UNAUTHENTICATED: 'UNAUTHENTICATED',
+  FORBIDDEN: 'FORBIDDEN',
+  PERMISSION_DENIED: 'PERMISSION_DENIED',
+  OUT_OF_SCOPE: 'OUT_OF_SCOPE',
+  NOT_FOUND: 'NOT_FOUND',
+  CONFLICT: 'CONFLICT',
+  TENANT_MISMATCH: 'TENANT_MISMATCH',
+  MODULE_DISABLED: 'MODULE_DISABLED',
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
+  ACCOUNT_INACTIVE: 'ACCOUNT_INACTIVE',
+  TWO_FACTOR_REQUIRED: 'TWO_FACTOR_REQUIRED',
+  TWO_FACTOR_INVALID: 'TWO_FACTOR_INVALID',
+  REFRESH_TOKEN_INVALID: 'REFRESH_TOKEN_INVALID',
+  PASSWORD_POLICY: 'PASSWORD_POLICY',
+  LEAVE_OVERLAP: 'LEAVE_OVERLAP',
+  INSUFFICIENT_BALANCE: 'INSUFFICIENT_BALANCE',
+  LEAVE_MIN_NOTICE: 'LEAVE_MIN_NOTICE',
+  LEAVE_MAX_DAYS: 'LEAVE_MAX_DAYS',
+  LEAVE_ATTACHMENT_REQUIRED: 'LEAVE_ATTACHMENT_REQUIRED',
+  LEAVE_COVERAGE: 'LEAVE_COVERAGE',
+  WORKFLOW_STEP_NOT_ALLOWED: 'WORKFLOW_STEP_NOT_ALLOWED',
+  WORKFLOW_ALREADY_RESOLVED: 'WORKFLOW_ALREADY_RESOLVED',
+  WORKFLOW_NO_DEFINITION: 'WORKFLOW_NO_DEFINITION',
+  DUPLICATE_CANDIDATE: 'DUPLICATE_CANDIDATE',
+  APPLICATION_STAGE_INVALID: 'APPLICATION_STAGE_INVALID',
+  REJECTION_REASON_REQUIRED: 'REJECTION_REASON_REQUIRED',
+  ALREADY_HIRED: 'ALREADY_HIRED',
+  CLOCK_DUPLICATE: 'CLOCK_DUPLICATE',
+  CLOCK_OUT_OF_GEOFENCE: 'CLOCK_OUT_OF_GEOFENCE',
+  CLOCK_SEQUENCE_INVALID: 'CLOCK_SEQUENCE_INVALID',
+  QUIZ_NO_ATTEMPTS_LEFT: 'QUIZ_NO_ATTEMPTS_LEFT',
+  LESSON_LOCKED: 'LESSON_LOCKED',
+  SURVEY_CLOSED: 'SURVEY_CLOSED',
+  SURVEY_ALREADY_ANSWERED: 'SURVEY_ALREADY_ANSWERED',
+  SURVEY_THRESHOLD_NOT_MET: 'SURVEY_THRESHOLD_NOT_MET',
+  ETHICS_CODE_INVALID: 'ETHICS_CODE_INVALID',
+  ETHICS_CONFLICT_OF_INTEREST: 'ETHICS_CONFLICT_OF_INTEREST',
+  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
+  FILE_TYPE_NOT_ALLOWED: 'FILE_TYPE_NOT_ALLOWED',
+  EMBED_DOMAIN_NOT_ALLOWED: 'EMBED_DOMAIN_NOT_ALLOWED',
+  RATE_LIMITED: 'RATE_LIMITED',
+  IMMUTABLE_RECORD: 'IMMUTABLE_RECORD',
+  REVIEW_CYCLE_CLOSED: 'REVIEW_CYCLE_CLOSED',
+  CONSENT_REQUIRED: 'CONSENT_REQUIRED',
+} as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
+
+/** Configurable catalogs stored in `catalog_items` (catalog_key). */
+export const CATALOG_KEYS = {
+  DOCUMENT_TYPE: 'document_type',
+  CONTRACT_TYPE: 'contract_type',
+  WORK_MODALITY: 'work_modality',
+  MOVEMENT_TYPE: 'movement_type',
+  EXIT_REASON: 'exit_reason',
+  REJECTION_REASON: 'rejection_reason',
+  CANDIDATE_SOURCE: 'candidate_source',
+  REQUISITION_REASON: 'requisition_reason',
+  EVENT_TYPE: 'event_type',
+  ASSET_TYPE: 'asset_type',
+  TICKET_CATEGORY: 'ticket_category',
+  ETHICS_CATEGORY: 'ethics_category',
+  EDUCATION_LEVEL: 'education_level',
+  MARITAL_STATUS: 'marital_status',
+  RELATIONSHIP: 'relationship',
+  BLOOD_TYPE: 'blood_type',
+  EPS: 'eps',
+  ARL: 'arl',
+  PENSION_FUND: 'pension_fund',
+  SEVERANCE_FUND: 'severance_fund',
+  DISCIPLINARY_TYPE: 'disciplinary_type',
+  BENEFIT_CATEGORY: 'benefit_category',
+  RISK_LEVEL: 'risk_level',
+  ACCIDENT_TYPE: 'accident_type',
+  PPE_TYPE: 'ppe_type',
+  COMPETENCY_CATEGORY: 'competency_category',
+  COURSE_CATEGORY: 'course_category',
+  WIKI_CATEGORY: 'wiki_category',
+} as const;
+
+export type CatalogKey = (typeof CATALOG_KEYS)[keyof typeof CATALOG_KEYS];
+
+export const CATALOG_LABELS: Record<string, string> = {
+  document_type: 'Tipos de documento del legajo',
+  contract_type: 'Tipos de contrato',
+  work_modality: 'Modalidades de trabajo',
+  movement_type: 'Tipos de movimiento de personal',
+  exit_reason: 'Motivos de salida',
+  rejection_reason: 'Motivos de descarte',
+  candidate_source: 'Fuentes de candidatos',
+  requisition_reason: 'Motivos de requisicion',
+  event_type: 'Tipos de novedad',
+  asset_type: 'Tipos de activo',
+  ticket_category: 'Categorias de ticket',
+  ethics_category: 'Categorias del canal de denuncias',
+  education_level: 'Niveles de formacion',
+  marital_status: 'Estado civil',
+  relationship: 'Parentesco',
+  blood_type: 'Grupo sanguineo',
+  eps: 'EPS',
+  arl: 'ARL',
+  pension_fund: 'Fondo de pensiones',
+  severance_fund: 'Fondo de cesantias',
+  disciplinary_type: 'Tipos de proceso disciplinario',
+  benefit_category: 'Categorias de beneficio',
+  risk_level: 'Niveles de riesgo',
+  accident_type: 'Tipos de accidente',
+  ppe_type: 'Tipos de EPP',
+  competency_category: 'Categorias de competencia',
+  course_category: 'Categorias de curso',
+  wiki_category: 'Categorias de wiki',
+};
+
+/** Domain events emitted through EventEmitter2 and forwarded to webhooks. */
+export const DOMAIN_EVENTS = {
+  EMPLOYEE_CREATED: 'employee.created',
+  EMPLOYEE_HIRED: 'employee.hired',
+  EMPLOYEE_UPDATED: 'employee.updated',
+  EMPLOYEE_TERMINATED: 'employee.terminated',
+  EMPLOYEE_MOVED: 'employee.moved',
+  CANDIDATE_APPLIED: 'candidate.applied',
+  APPLICATION_STAGE_CHANGED: 'application.stage_changed',
+  APPLICATION_REJECTED: 'application.rejected',
+  OFFER_SENT: 'offer.sent',
+  OFFER_ACCEPTED: 'offer.accepted',
+  LEAVE_REQUESTED: 'leave.requested',
+  LEAVE_APPROVED: 'leave.approved',
+  LEAVE_REJECTED: 'leave.rejected',
+  LEAVE_CANCELLED: 'leave.cancelled',
+  ATTENDANCE_CLOCKED: 'attendance.clocked',
+  ONBOARDING_STARTED: 'onboarding.started',
+  ONBOARDING_TASK_COMPLETED: 'onboarding.task_completed',
+  ONBOARDING_COMPLETED: 'onboarding.completed',
+  OFFBOARDING_STARTED: 'offboarding.started',
+  COURSE_COMPLETED: 'course.completed',
+  CERTIFICATE_ISSUED: 'certificate.issued',
+  REVIEW_CYCLE_OPENED: 'review.cycle_opened',
+  REVIEW_SUBMITTED: 'review.submitted',
+  FEEDBACK_GIVEN: 'feedback.given',
+  RECOGNITION_GIVEN: 'recognition.given',
+  POST_PUBLISHED: 'post.published',
+  SURVEY_PUBLISHED: 'survey.published',
+  SURVEY_ANSWERED: 'survey.answered',
+  ETHICS_REPORT_CREATED: 'ethics.report_created',
+  ETHICS_CASE_CLOSED: 'ethics.case_closed',
+  TICKET_CREATED: 'ticket.created',
+  TICKET_ASSIGNED: 'ticket.assigned',
+  TICKET_CLOSED: 'ticket.closed',
+  WORKFLOW_STEP_PENDING: 'workflow.step_pending',
+  WORKFLOW_COMPLETED: 'workflow.completed',
+  WORKFLOW_REJECTED: 'workflow.rejected',
+  DOCUMENT_EXPIRING: 'document.expiring',
+  POLICY_PUBLISHED: 'policy.published',
+  SIGNATURE_REQUESTED: 'signature.requested',
+} as const;
+
+export type DomainEvent = (typeof DOMAIN_EVENTS)[keyof typeof DOMAIN_EVENTS];
+
+export const PAGINATION = {
+  DEFAULT_PAGE: 1,
+  DEFAULT_LIMIT: 25,
+  MAX_LIMIT: 200,
+} as const;
+
+/** Minimum responses required before a survey segment can be displayed. */
+export const SURVEY_ANONYMITY_THRESHOLD = 5;
+
+/** Colombia: statutory paid vacation days per completed year of service. */
+export const CO_VACATION_DAYS_PER_YEAR = 15;
+
+/** Default retention for non-hired candidate data, in months. */
+export const DEFAULT_CANDIDATE_RETENTION_MONTHS = 12;
+
+export const DEFAULT_TIMEZONE = 'America/Bogota';
+export const DEFAULT_LOCALE = 'es';
+export const SUPPORTED_LOCALES = ['es', 'en', 'de'] as const;
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
+
+export const DEFAULT_EMBED_PROVIDERS = [
+  { name: 'YouTube', domain: 'youtube.com', oembed: 'https://www.youtube.com/oembed?format=json&url=' },
+  { name: 'YouTube (corto)', domain: 'youtu.be', oembed: 'https://www.youtube.com/oembed?format=json&url=' },
+  { name: 'Vimeo', domain: 'vimeo.com', oembed: 'https://vimeo.com/api/oembed.json?url=' },
+  { name: 'Loom', domain: 'loom.com', oembed: null },
+  { name: 'Genially', domain: 'genial.ly', oembed: null },
+  { name: 'Genially', domain: 'view.genially.com', oembed: null },
+  { name: 'H5P', domain: 'h5p.org', oembed: null },
+  { name: 'H5P Cloud', domain: 'h5p.com', oembed: null },
+  { name: 'Google Docs', domain: 'docs.google.com', oembed: null },
+  { name: 'Google Slides', domain: 'slides.google.com', oembed: null },
+  { name: 'Google Forms', domain: 'forms.gle', oembed: null },
+  { name: 'Canva', domain: 'canva.com', oembed: 'https://www.canva.com/_oembed?url=' },
+  { name: 'Figma', domain: 'figma.com', oembed: 'https://www.figma.com/api/oembed?url=' },
+  { name: 'Miro', domain: 'miro.com', oembed: null },
+  { name: 'Padlet', domain: 'padlet.com', oembed: null },
+  { name: 'Wordwall', domain: 'wordwall.net', oembed: null },
+  { name: 'Kahoot', domain: 'kahoot.it', oembed: null },
+  { name: 'Quizizz', domain: 'quizizz.com', oembed: null },
+  { name: 'Spotify', domain: 'open.spotify.com', oembed: 'https://open.spotify.com/oembed?url=' },
+  { name: 'SoundCloud', domain: 'soundcloud.com', oembed: 'https://soundcloud.com/oembed?format=json&url=' },
+  { name: 'X / Twitter', domain: 'twitter.com', oembed: null },
+  { name: 'CodePen', domain: 'codepen.io', oembed: 'https://codepen.io/api/oembed?format=json&url=' },
+  { name: 'Mentimeter', domain: 'menti.com', oembed: null },
+];
+
+export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+export const ALLOWED_UPLOAD_MIME = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/csv',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'application/zip',
+];
