@@ -35,6 +35,43 @@ interface CompanyUser {
   roles: Array<{ role: { id: string; key: string; name: string } }>;
 }
 
+/** Row as `GET /users` returns it: the user fields flat, roles unwrapped. */
+interface UserListRow {
+  companyUserId: string;
+  isActive: boolean;
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  avatarUrl: string | null;
+  status: string;
+  twoFactorEnabled: boolean;
+  lastLoginAt: string | null;
+  isSuperadmin: boolean;
+  roles: Array<{ id: string; key: string; name: string }>;
+}
+
+/** The table works on the membership (company user) with the user nested. */
+function toCompanyUser(row: UserListRow): CompanyUser {
+  const { companyUserId, roles, ...user } = row;
+  return {
+    id: companyUserId,
+    userId: user.id,
+    user: {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: user.avatarUrl,
+      status: user.status,
+      twoFactorEnabled: user.twoFactorEnabled,
+      lastLoginAt: user.lastLoginAt,
+      isSuperadmin: user.isSuperadmin,
+    },
+    roles: (roles ?? []).map((role) => ({ role })),
+  };
+}
+
 interface Role {
   id: string;
   key: string;
@@ -64,7 +101,15 @@ export function UsersTab() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['users', page, debounced, status],
-    queryFn: () => apiList<CompanyUser>('/users', { page, limit: 25, search: debounced, status }),
+    queryFn: async () => {
+      const result = await apiList<UserListRow>('/users', {
+        page,
+        limit: 25,
+        search: debounced,
+        status,
+      });
+      return { ...result, data: (result.data ?? []).map(toCompanyUser) };
+    },
   });
 
   const { data: roles } = useQuery({

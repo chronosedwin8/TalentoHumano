@@ -39,6 +39,10 @@ sigue abierto esta en `docs/ACCEPTANCE.md` y en `PLAN.md`.
 - **Autoguardado del editor de lecciones** sobreescribia lo tecleado entre el
   guardado y el refetch. El servidor solo siembra el editor una vez por
   leccion.
+- **Configuracion > Usuarios y Auditoria se caian.** La pantalla de usuarios
+  esperaba el usuario anidado y la API lo devuelve plano; el filtro de
+  auditoria pintaba objetos `{ entityType, count }` como texto. Ahora hay un
+  recorrido de navegador por todas las pestanas de Configuracion.
 - **Correo personal vacio** en "Mi perfil" devolvia 422: ahora se envia `null`.
 - **Ticket sin asignar visible para usuarios sin colaborador:** `null === null`
   en la comparacion de asignado concedia acceso.

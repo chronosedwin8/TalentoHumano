@@ -68,7 +68,7 @@ function AuditLogs() {
 
   const { data: entityTypes } = useQuery({
     queryKey: ['audit', 'entity-types'],
-    queryFn: () => apiGet<string[]>('/audit/entity-types'),
+    queryFn: () => apiGet<Array<{ entityType: string; count: number }>>('/audit/entity-types'),
     retry: false,
   });
 
@@ -139,8 +139,8 @@ function AuditLogs() {
             >
               <option value="">Todas las entidades</option>
               {(entityTypes ?? []).map((type) => (
-                <option key={type} value={type}>
-                  {type}
+                <option key={type.entityType} value={type.entityType}>
+                  {type.entityType} ({type.count})
                 </option>
               ))}
             </NativeSelect>

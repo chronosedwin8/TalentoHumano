@@ -202,7 +202,7 @@ principio a fin.
 | Lint y typecheck en pre-commit | Cumple: husky + lint-staged |
 | Cobertura >= 80% en logica critica | Cumple: 98.6% en `@talento/shared`, 100% en el cifrado ([ADR-0010](DECISIONS.md#adr-0010)) |
 | e2e de API por modulo con permisos y aislamiento | Cumple: 106 pruebas en 7 suites |
-| Playwright: ingreso, vacaciones, postulacion, marcacion, encuesta, denuncia | Cumple: 47 pruebas, escritorio y movil |
+| Playwright: ingreso, vacaciones, postulacion, marcacion, encuesta, denuncia | Cumple: 58 pruebas, escritorio y movil |
 | Prueba de carga basica con k6 | Cumple: `infra/load/` |
 
 ## Resumen de pruebas
@@ -211,7 +211,7 @@ principio a fin.
 |---|---|---|
 | Unitarias | 182 | pasan |
 | e2e de API | 106 | pasan |
-| Navegador | 47 | pasan |
+| Navegador | 58 | pasan |
 
 ## Internacionalizacion: la interfaz esta en espanol, el i18n no la cubre entera
 
