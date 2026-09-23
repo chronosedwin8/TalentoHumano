@@ -67,6 +67,7 @@ pnpm build               # compila los tres paquetes
 pnpm lint                # ESLint sin advertencias permitidas
 pnpm typecheck           # TypeScript estricto en todo el monorepo
 pnpm test                # pruebas unitarias
+pnpm --filter @talento/api run admin:create -- --email correo --password clave --name "Nombre"   # cuenta con acceso total
 pnpm test:cov            # unitarias con umbral de cobertura
 pnpm test:e2e            # e2e de la API contra PostgreSQL real
 pnpm test:browser        # flujos de navegador (Playwright)

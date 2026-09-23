@@ -59,6 +59,17 @@ const AssetsPage = lazy(() => import('@/features/people/AssetsPage'), 'AssetsPag
 const JobsPage = lazy(() => import('@/features/recruiting/JobsPage'), 'JobsPage');
 const PipelinePage = lazy(() => import('@/features/recruiting/PipelinePage'), 'PipelinePage');
 const CandidatesPage = lazy(() => import('@/features/recruiting/CandidatesPage'), 'CandidatesPage');
+const InterviewsPage = lazy(() => import('@/features/recruiting/InterviewsPage'), 'InterviewsPage');
+const OffersPage = lazy(() => import('@/features/recruiting/OffersPage'), 'OffersPage');
+const CandidateDetailPage = lazy(
+  () => import('@/features/recruiting/CandidateDetailPage'),
+  'CandidateDetailPage',
+);
+const LeaveTypesPage = lazy(() => import('@/features/leaves/LeaveTypesPage'), 'LeaveTypesPage');
+const JustificationsPage = lazy(
+  () => import('@/features/time/JustificationsPage'),
+  'JustificationsPage',
+);
 const RequisitionsPage = lazy(
   () => import('@/features/recruiting/RequisitionsPage'),
   'RequisitionsPage',
@@ -481,6 +492,30 @@ export const router = createBrowserRouter([
           },
 
           {
+            path: '/recruiting/candidatos/:id',
+            element: (
+              <RequireModule module="recruiting">
+                <CandidateDetailPage />
+              </RequireModule>
+            ),
+          },
+          {
+            path: '/recruiting/entrevistas',
+            element: (
+              <RequireModule module="recruiting">
+                <InterviewsPage />
+              </RequireModule>
+            ),
+          },
+          {
+            path: '/recruiting/ofertas',
+            element: (
+              <RequireModule module="recruiting">
+                <OffersPage />
+              </RequireModule>
+            ),
+          },
+          {
             path: '/onboarding',
             element: (
               <RequireModule module="onboarding">
@@ -546,6 +581,14 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: '/leaves/tipos',
+            element: (
+              <RequireModule module="leaves">
+                <LeaveTypesPage />
+              </RequireModule>
+            ),
+          },
+          {
             path: '/leaves/exportacion',
             element: (
               <RequireModule module="leaves">
@@ -579,6 +622,14 @@ export const router = createBrowserRouter([
             ),
           },
 
+          {
+            path: '/time/justificaciones',
+            element: (
+              <RequireModule module="time">
+                <JustificationsPage />
+              </RequireModule>
+            ),
+          },
           {
             path: '/learning',
             element: (

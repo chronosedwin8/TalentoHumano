@@ -1,6 +1,6 @@
 import { leaveRequestSchema } from '@talento/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarDays, Plus, Wallet, X } from 'lucide-react';
+import { CalendarDays, Plus, Settings2, Wallet, X } from 'lucide-react';
 import * as React from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable, type Column } from '@/components/DataTable';
@@ -179,6 +179,14 @@ export function LeaveRequestsPage() {
                 Saldos
               </Link>
             </Button>
+            {can('leaves.type.manage') ? (
+              <Button asChild variant="outline">
+                <Link to="/leaves/tipos">
+                  <Settings2 className="h-4 w-4" />
+                  Tipos y politicas
+                </Link>
+              </Button>
+            ) : null}
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" />
               Nueva solicitud

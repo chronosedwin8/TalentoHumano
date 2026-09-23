@@ -1,6 +1,6 @@
 import { jobPostingSchema } from '@talento/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, FileText, Plus, Users } from 'lucide-react';
+import { CalendarClock, ExternalLink, FileSignature, FileText, Plus, Users } from 'lucide-react';
 import * as React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { DataTable, type Column } from '@/components/DataTable';
@@ -166,6 +166,18 @@ export function JobsPage() {
               <Link to="/recruiting/candidatos">
                 <Users className="h-4 w-4" />
                 Banco de candidatos
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/recruiting/entrevistas">
+                <CalendarClock className="h-4 w-4" />
+                Entrevistas
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/recruiting/ofertas">
+                <FileSignature className="h-4 w-4" />
+                Ofertas
               </Link>
             </Button>
             {can('recruiting.job.create') ? (

@@ -52,6 +52,21 @@ docker compose -f infra/docker-compose.prod.yml exec api npx tsx prisma/seed.ts
 **No ejecute `seed-demo.ts` en produccion:** crea una empresa de ejemplo con
 datos ficticios.
 
+## Cuenta de administracion
+
+La semilla base crea `superadmin@talento.local` (contrasena en
+`SEED_SUPERADMIN_PASSWORD`). Para dar acceso total a una persona real, sin
+tocar la base a mano:
+
+```bash
+pnpm --filter @talento/api run admin:create -- \n  --email ana@empresa.com --password 'UnaClaveLarga!' --name "Ana Perez"
+```
+
+El comando crea o promueve la cuenta como superadministradora y la hace
+administradora de todas las empresas activas; la que tiene mas colaboradores
+queda como empresa inicial. La contrasena no se guarda en ningun archivo: solo
+su hash. Ejecutarlo de nuevo con el mismo correo actualiza nombre y clave.
+
 ## Despliegues siguientes
 
 ```bash

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Star } from 'lucide-react';
 import * as React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DataTable, type Column } from '@/components/DataTable';
 import { apiList } from '@/lib/api';
 import { formatDate } from '@/lib/utils';
@@ -21,6 +22,7 @@ interface CandidateRow {
 }
 
 export function CandidatesPage() {
+  const navigate = useNavigate();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState('');
   const [debounced, setDebounced] = React.useState('');
@@ -116,6 +118,7 @@ export function CandidatesPage() {
         page={page}
         limit={25}
         onPageChange={setPage}
+        onRowClick={(row) => navigate(`/recruiting/candidatos/${row.id}`)}
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Nombre, correo, documento o contenido del CV"

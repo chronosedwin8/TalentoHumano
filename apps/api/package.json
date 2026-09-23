@@ -21,7 +21,8 @@
     "prisma:push": "prisma db push",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
-    "seed:demo": "tsx prisma/seed-demo.ts"
+    "seed:demo": "tsx prisma/seed-demo.ts",
+    "admin:create": "tsx prisma/grant-superadmin.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

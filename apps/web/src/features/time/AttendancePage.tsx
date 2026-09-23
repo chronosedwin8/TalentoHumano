@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
+import { ClipboardCheck, Download } from 'lucide-react';
 import * as React from 'react';
+import { Link } from 'react-router-dom';
 import { DataTable, type Column } from '@/components/DataTable';
 import { BarChart } from '@/components/charts';
-import { apiGet, apiList } from '@/lib/api';
+import { apiDownload, apiGet, apiList } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import {
   addDaysKey,
   formatDate,
@@ -14,6 +17,7 @@ import {
 } from '@/lib/utils';
 import {
   Badge,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -51,6 +55,7 @@ interface Summary {
 }
 
 export function AttendancePage() {
+  const can = useAuth((state) => state.can);
   const [from, setFrom] = React.useState(addDaysKey(-30));
   const [to, setTo] = React.useState(todayKey());
   const [status, setStatus] = React.useState('');
@@ -141,6 +146,30 @@ export function AttendancePage() {
       <PageHeader
         title="Asistencia"
         description="Registro diario calculado a partir de las marcaciones, ausencias y festivos."
+        actions={
+          <>
+            {can('time.justification.approve') ? (
+              <Button asChild variant="outline">
+                <Link to="/time/justificaciones">
+                  <ClipboardCheck className="h-4 w-4" />
+                  Justificaciones
+                </Link>
+              </Button>
+            ) : null}
+            <Button
+              variant="outline"
+              onClick={() =>
+                void apiDownload(
+                  `/time/attendance/export?from=${from}&to=${to}&status=${status}&departmentId=${departmentId}`,
+                  `asistencia-${from}-${to}.csv`,
+                )
+              }
+            >
+              <Download className="h-4 w-4" />
+              Exportar CSV
+            </Button>
+          </>
+        }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
