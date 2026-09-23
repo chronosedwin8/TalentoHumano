@@ -8,6 +8,8 @@ import type { RequestContext } from '../../common/types/request-context';
 import { AccessControlService } from '../access/access-control.service';
 import { AuthService } from '../auth/auth.service';
 import { MailService } from '../notifications/mail.service';
+import { UserStatus } from '@prisma/client';
+import { enumQuery } from '../../common/utils/crud';
 
 export interface CreateUserInput {
   email: string;
@@ -29,6 +31,7 @@ export class UsersService {
     private readonly mail: MailService,
     private readonly encryption: EncryptionService,
     private readonly config: ConfigService,
+    private readonly auth: AuthService,
   ) {}
 
   async list(
@@ -41,7 +44,7 @@ export class UsersService {
       ...(params.roleId ? { roles: { some: { roleId: params.roleId } } } : {}),
       user: {
         deletedAt: null,
-        ...(params.status ? { status: params.status as never } : {}),
+        ...(params.status ? { status: enumQuery(params.status, UserStatus, 'status') } : {}),
         ...(params.search
           ? {
               OR: [
@@ -198,6 +201,7 @@ export class UsersService {
   }
 
   async forcePasswordChange(ctx: RequestContext, userId: string) {
+    await this.requireMembership(ctx, userId);
     await this.prisma.user.update({
       where: { id: userId },
       data: { mustChangePassword: true },
@@ -207,6 +211,46 @@ export class UsersService {
       data: { revokedAt: new Date() },
     });
     return { userId };
+  }
+
+  /* ------------------------------ sessions ------------------------------ */
+
+  /** Open sessions of another user, for the administrator's "Sesiones" dialog. */
+  async listSessions(ctx: RequestContext, userId: string) {
+    await this.requireMembership(ctx, userId);
+    return this.auth.listSessions(userId);
+  }
+
+  /** Closes one session of another user; a session of someone else is a 404. */
+  async revokeSession(ctx: RequestContext, userId: string, sessionId: string) {
+    await this.requireMembership(ctx, userId);
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, userId, revokedAt: null },
+      select: { id: true },
+    });
+    if (!session) throw BusinessException.notFound('Sesion');
+    await this.auth.logout(sessionId);
+    return { userId, sessionId };
+  }
+
+  /** Closes every open session of another user. */
+  async revokeAllSessions(ctx: RequestContext, userId: string) {
+    await this.requireMembership(ctx, userId);
+    // Keeps the caller's own session alive when an admin acts on themselves.
+    const revoked = await this.auth.logoutAll(
+      userId,
+      userId === ctx.userId ? ctx.sessionId : undefined,
+    );
+    return { userId, revoked };
+  }
+
+  /** The target user must belong to the caller's company. */
+  private async requireMembership(ctx: RequestContext, userId: string): Promise<void> {
+    const membership = await this.prisma.companyUser.findFirst({
+      where: { companyId: ctx.companyId, userId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!membership) throw BusinessException.notFound('Usuario');
   }
 
   async resetPassword(ctx: RequestContext, userId: string) {
@@ -370,11 +414,25 @@ export class UsersService {
 
   /* ---------------------------- delegations ----------------------------- */
 
+  /** Delegations with both parties resolved, so the UI can show names. */
   async listDelegations(ctx: RequestContext) {
-    return this.prisma.delegation.findMany({
+    const rows = await this.prisma.delegation.findMany({
       where: { companyId: ctx.companyId, deletedAt: null },
       orderBy: { startsAt: 'desc' },
     });
+    const userIds = [...new Set(rows.flatMap((row) => [row.fromUserId, row.toUserId]))];
+    const users = userIds.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, firstName: true, lastName: true, email: true },
+        })
+      : [];
+    const byId = new Map(users.map((user) => [user.id, user]));
+    return rows.map((row) => ({
+      ...row,
+      fromUser: byId.get(row.fromUserId) ?? null,
+      toUser: byId.get(row.toUserId) ?? null,
+    }));
   }
 
   async createDelegation(

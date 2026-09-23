@@ -446,7 +446,7 @@ function DeliveriesDialog({
               >
                 <span className="min-w-0 flex-1 truncate font-mono text-xs">{delivery.event}</span>
                 <span className="text-xs text-muted-foreground">intento {delivery.attempt}</span>
-                <Badge tone={delivery.status === 'success' ? 'success' : 'danger'}>
+                <Badge tone={delivery.status === 'sent' ? 'success' : 'danger'}>
                   {delivery.statusCode ?? delivery.status}
                 </Badge>
                 <span className="text-xs text-muted-foreground">

@@ -70,11 +70,16 @@ export function LessonEditorPage() {
   const [document, setDocument] = React.useState<BlockDocument>(EMPTY_DOCUMENT);
   const [dirty, setDirty] = React.useState(false);
 
+  // The server copy seeds the editor once per lesson. After that the editor
+  // is the source of truth: the autosave invalidates the query, and syncing
+  // again from the refetch would overwrite what was typed in between.
+  const seededFor = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (data?.content) {
+    if (data?.content && seededFor.current !== id) {
+      seededFor.current = id ?? null;
       setDocument((data.content.draftBlocks ?? data.content.blocks) as BlockDocument);
     }
-  }, [data?.content]);
+  }, [data?.content, id]);
 
   const save = useMutation({
     mutationFn: ({ blocks, publish }: { blocks: BlockDocument; publish: boolean }) =>

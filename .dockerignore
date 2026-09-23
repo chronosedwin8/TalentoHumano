@@ -1,0 +1,23 @@
+# Build context hygiene. Host node_modules must never reach the image: on
+# Windows pnpm creates junctions that Docker sends as dangling absolute
+# symlinks, and the build then fails inside `tsc`. Secrets stay out too.
+node_modules
+**/node_modules
+**/dist
+**/coverage
+**/playwright-report
+**/test-results
+**/storage
+.git
+.github
+.husky
+.env
+**/.env
+**/.env.*
+!**/.env.example
+infra/backups
+infra/certbot
+infra/load
+docs
+*.md
+!packages/shared/README.md

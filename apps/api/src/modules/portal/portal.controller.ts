@@ -9,6 +9,8 @@ import type { RequestContext } from '../../common/types/request-context';
 import { WorkflowsService } from '../../core/workflows/workflows.service';
 import { LeavesService } from '../leaves/leaves.service';
 import { PeopleService } from '../people/people.service';
+import { LeaveRequestStatus } from '@prisma/client';
+import { enumQuery } from '../../common/utils/crud';
 
 const selfUpdateSchema = z.object({
   phone: z.string().max(40).nullable().optional(),
@@ -227,7 +229,7 @@ export class PortalController {
           companyId: ctx.companyId,
           employeeId: ctx.employeeId,
           deletedAt: null,
-          ...(status ? { status: status as never } : {}),
+          ...(status ? { status: enumQuery(status, LeaveRequestStatus, 'status') } : {}),
         },
         include: { leaveType: { select: { name: true, color: true } } },
         orderBy: { createdAt: 'desc' },

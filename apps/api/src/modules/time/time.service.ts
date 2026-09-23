@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import type { AttendanceStatus, ClockSource, ClockType } from '@prisma/client';
+import type {
+  AttendanceStatus,
+  ClockSource,
+  ClockType,
+  JustificationStatus,
+  WorkflowStatus,
+} from '@prisma/client';
 import {
   DOMAIN_EVENTS,
   ERROR_CODES,
@@ -12,6 +18,35 @@ import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
 import { ScopeService } from '../../core/access/scope.service';
+import { NotificationsService } from '../../core/notifications/notifications.service';
+
+/**
+ * Event keys for the time notifications. They live here instead of
+ * DOMAIN_EVENTS because they only drive notification preferences.
+ */
+const TIME_EVENTS = {
+  SHIFT_PUBLISHED: 'shift.published',
+  SHIFT_SWAP_REQUESTED: 'shift.swap_requested',
+  SHIFT_SWAP_DECIDED: 'shift.swap_decided',
+  JUSTIFICATION_DECIDED: 'attendance.justification_decided',
+} as const;
+
+const EMPLOYEE_SUMMARY = { id: true, fullName: true, employeeCode: true } as const;
+
+export interface AttendanceFilters {
+  from: string;
+  to: string;
+  employeeId?: string;
+  departmentId?: string;
+  status?: string;
+}
+
+export interface SwapRequestInput {
+  requesterAssignmentId: string;
+  targetEmployeeId: string;
+  targetAssignmentId?: string | null;
+  reason?: string | null;
+}
 
 export interface ClockInput {
   type: ClockType;
@@ -40,7 +75,13 @@ export class TimeService {
     private readonly prisma: PrismaService,
     private readonly scope: ScopeService,
     private readonly events: EventEmitter2,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** The guard lets superadmins through, so the service must too. */
+  private canDo(ctx: RequestContext, permission: string): boolean {
+    return ctx.isSuperadmin || this.scope.has(ctx, permission);
+  }
 
   /* ------------------------------ clocking ------------------------------ */
 
@@ -298,20 +339,10 @@ export class TimeService {
 
   /* ----------------------------- attendance ----------------------------- */
 
-  async attendance(
-    ctx: RequestContext,
-    params: {
-      from: string;
-      to: string;
-      employeeId?: string;
-      departmentId?: string;
-      status?: string;
-      page: number;
-      limit: number;
-    },
-  ) {
+  /** Shared filter for the attendance listing and its CSV export. */
+  private async attendanceWhere(ctx: RequestContext, params: AttendanceFilters) {
     const employeeScope = await this.scope.employeeScope(ctx, 'time.attendance.read');
-    const where = {
+    return {
       companyId: ctx.companyId,
       date: { gte: fromDateKey(params.from), lte: fromDateKey(params.to) },
       ...(employeeScope.kind === 'ids' ? { employeeId: { in: employeeScope.ids } } : {}),
@@ -319,20 +350,29 @@ export class TimeService {
       ...(params.status ? { status: params.status as AttendanceStatus } : {}),
       ...(params.departmentId ? { employee: { departmentId: params.departmentId } } : {}),
     };
+  }
+
+  private readonly attendanceInclude = {
+    employee: {
+      select: {
+        id: true,
+        fullName: true,
+        employeeCode: true,
+        department: { select: { name: true } },
+      },
+    },
+  };
+
+  async attendance(
+    ctx: RequestContext,
+    params: AttendanceFilters & { page: number; limit: number },
+  ) {
+    const where = await this.attendanceWhere(ctx, params);
 
     const [rows, total] = await Promise.all([
       this.prisma.attendanceDay.findMany({
         where,
-        include: {
-          employee: {
-            select: {
-              id: true,
-              fullName: true,
-              employeeCode: true,
-              department: { select: { name: true } },
-            },
-          },
-        },
+        include: this.attendanceInclude,
         orderBy: [{ date: 'desc' }, { employeeId: 'asc' }],
         skip: (params.page - 1) * params.limit,
         take: params.limit,
@@ -341,6 +381,55 @@ export class TimeService {
     ]);
 
     return { rows, total };
+  }
+
+  /** Every row matching the filters, capped so a wide range cannot exhaust memory. */
+  async attendanceExport(ctx: RequestContext, params: AttendanceFilters) {
+    const where = await this.attendanceWhere(ctx, params);
+    return this.prisma.attendanceDay.findMany({
+      where,
+      include: this.attendanceInclude,
+      orderBy: [{ employeeId: 'asc' }, { date: 'asc' }],
+      take: 20_000,
+    });
+  }
+
+  /** Days worked remotely per employee in the period; a count, never a value. */
+  async remoteSummary(ctx: RequestContext, from: string, to: string) {
+    const employeeScope = await this.scope.employeeScope(ctx, 'time.attendance.read');
+    const where = {
+      companyId: ctx.companyId,
+      date: { gte: fromDateKey(from), lte: fromDateKey(to) },
+      ...(employeeScope.kind === 'ids' ? { employeeId: { in: employeeScope.ids } } : {}),
+      OR: [{ status: 'remote' as AttendanceStatus }, { isRemote: true }],
+    };
+
+    const grouped = await this.prisma.attendanceDay.groupBy({
+      by: ['employeeId'],
+      where,
+      _count: { _all: true },
+      _sum: { workedMinutes: true },
+    });
+    if (!grouped.length) return { rows: [], totalDays: 0 };
+
+    const employees = await this.prisma.employee.findMany({
+      where: { id: { in: grouped.map((row) => row.employeeId) } },
+      select: { ...EMPLOYEE_SUMMARY, department: { select: { name: true } } },
+    });
+    const byId = new Map(employees.map((employee) => [employee.id, employee]));
+
+    const rows = grouped
+      .map((row) => ({
+        employeeId: row.employeeId,
+        fullName: byId.get(row.employeeId)?.fullName ?? '—',
+        employeeCode: byId.get(row.employeeId)?.employeeCode ?? '',
+        department: byId.get(row.employeeId)?.department?.name ?? null,
+        remoteDays: row._count._all,
+        workedHours: Number(((row._sum.workedMinutes ?? 0) / 60).toFixed(1)),
+      }))
+      .sort((a, b) => b.remoteDays - a.remoteDays || a.fullName.localeCompare(b.fullName));
+
+    return { rows, totalDays: rows.reduce((acc, row) => acc + row.remoteDays, 0) };
   }
 
   async attendanceSummary(ctx: RequestContext, from: string, to: string) {
@@ -400,6 +489,373 @@ export class TimeService {
         ...(input.workedMinutes !== undefined ? { workedMinutes: input.workedMinutes } : {}),
         updatedById: ctx.userId,
       },
+    });
+  }
+
+  /* --------------------------- justifications --------------------------- */
+
+  /** An employee justifies one of their own attendance days. */
+  async createJustification(
+    ctx: RequestContext,
+    input: { attendanceDayId: string; reason: string; fileId?: string | null },
+  ) {
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+    const day = await this.prisma.attendanceDay.findFirst({
+      where: { id: input.attendanceDayId, companyId: ctx.companyId },
+      select: { id: true, employeeId: true },
+    });
+    if (!day) throw BusinessException.notFound('Dia de asistencia');
+    if (day.employeeId !== ctx.employeeId)
+      throw BusinessException.forbidden('Solo puede justificar sus propios dias');
+
+    const pending = await this.prisma.attendanceJustification.findFirst({
+      where: { attendanceDayId: day.id, status: 'pending' },
+      select: { id: true },
+    });
+    if (pending)
+      throw BusinessException.conflict('Ya existe una justificacion pendiente para ese dia');
+
+    return this.prisma.attendanceJustification.create({
+      data: {
+        companyId: ctx.companyId,
+        attendanceDayId: day.id,
+        employeeId: ctx.employeeId,
+        reason: input.reason,
+        fileId: input.fileId ?? null,
+      },
+    });
+  }
+
+  async decideJustification(
+    ctx: RequestContext,
+    id: string,
+    decision: 'approved' | 'rejected',
+    comment?: string | null,
+  ) {
+    const justification = await this.prisma.attendanceJustification.findFirst({
+      where: { id, companyId: ctx.companyId },
+      include: { attendanceDay: { select: { date: true } } },
+    });
+    if (!justification) throw BusinessException.notFound('Justificacion');
+    if (justification.status !== 'pending')
+      throw BusinessException.validation('La justificacion ya fue decidida');
+
+    const updated = await this.prisma.attendanceJustification.update({
+      where: { id },
+      data: {
+        status: decision as JustificationStatus,
+        decidedById: ctx.userId,
+        decidedAt: new Date(),
+        decisionComment: comment ?? null,
+      },
+    });
+    if (decision === 'approved') {
+      await this.prisma.attendanceDay.update({
+        where: { id: justification.attendanceDayId },
+        data: { notes: justification.reason.slice(0, 500), updatedById: ctx.userId },
+      });
+    }
+
+    const date = toDateKey(justification.attendanceDay.date);
+    await this.notifications.notify({
+      companyId: ctx.companyId,
+      employeeIds: [justification.employeeId],
+      eventKey: TIME_EVENTS.JUSTIFICATION_DECIDED,
+      title:
+        decision === 'approved'
+          ? `Su justificacion del ${date} fue aprobada`
+          : `Su justificacion del ${date} fue rechazada`,
+      body: comment ?? undefined,
+      url: '/time/justifications',
+      entityType: 'attendance_justification',
+      entityId: id,
+      channels: ['in_app'],
+    });
+
+    return updated;
+  }
+
+  /* -------------------------------- shifts ------------------------------ */
+
+  /**
+   * Assignments in a range. Managers see everything within their scope,
+   * drafts included; everyone else only sees published assignments.
+   */
+  async planner(
+    ctx: RequestContext,
+    params: { from: string; to: string; departmentId?: string; employeeId?: string },
+  ) {
+    const employeeScope = await this.scope.employeeScope(ctx, 'time.shift.read');
+    const manager = this.canDo(ctx, 'time.shift.update');
+    return this.prisma.shiftAssignment.findMany({
+      where: {
+        companyId: ctx.companyId,
+        date: { gte: fromDateKey(params.from), lte: fromDateKey(params.to) },
+        ...this.scope.whereEmployee(employeeScope),
+        ...(params.employeeId ? { employeeId: params.employeeId } : {}),
+        ...(params.departmentId ? { employee: { departmentId: params.departmentId } } : {}),
+        ...(manager ? {} : { isPublished: true }),
+      },
+      include: { shift: true, employee: { select: EMPLOYEE_SUMMARY } },
+      orderBy: [{ date: 'asc' }],
+    });
+  }
+
+  /** Marks the draft assignments of a range as published and tells the people involved. */
+  async publishAssignments(
+    ctx: RequestContext,
+    params: { from: string; to: string; departmentId?: string; employeeIds?: string[] },
+  ) {
+    const where = {
+      companyId: ctx.companyId,
+      isPublished: false,
+      date: { gte: fromDateKey(params.from), lte: fromDateKey(params.to) },
+      ...(params.departmentId ? { employee: { departmentId: params.departmentId } } : {}),
+      ...(params.employeeIds?.length ? { employeeId: { in: params.employeeIds } } : {}),
+    };
+    const drafts = await this.prisma.shiftAssignment.findMany({
+      where,
+      select: { employeeId: true },
+    });
+    const employeeIds = [...new Set(drafts.map((row) => row.employeeId))];
+    const result = await this.prisma.shiftAssignment.updateMany({
+      where,
+      data: { isPublished: true },
+    });
+    await this.notifySchedulePublished(ctx.companyId, employeeIds, params.from, params.to);
+    return { published: result.count, employees: employeeIds.length };
+  }
+
+  /** In-app notice for everyone whose schedule was just published. */
+  async notifySchedulePublished(
+    companyId: string,
+    employeeIds: string[],
+    from: string,
+    to: string,
+  ) {
+    if (!employeeIds.length) return;
+    await this.notifications.notify({
+      companyId,
+      employeeIds,
+      eventKey: TIME_EVENTS.SHIFT_PUBLISHED,
+      title: 'Se publico su programacion de turnos',
+      body: `Revise sus turnos del ${from} al ${to}.`,
+      url: '/time/turnos',
+      entityType: 'shift_assignment',
+      channels: ['in_app'],
+    });
+  }
+
+  /* --------------------------------- swaps ------------------------------ */
+
+  private async assignmentOrFail(companyId: string, id: string) {
+    const assignment = await this.prisma.shiftAssignment.findFirst({
+      where: { id, companyId },
+      include: { shift: { select: { name: true, code: true } } },
+    });
+    if (!assignment) throw BusinessException.notFound('Asignacion de turno');
+    return assignment;
+  }
+
+  async requestSwap(ctx: RequestContext, input: SwapRequestInput) {
+    const requester = await this.assignmentOrFail(ctx.companyId, input.requesterAssignmentId);
+    const approver = this.canDo(ctx, 'time.swap.approve');
+    if (!approver && requester.employeeId !== ctx.employeeId)
+      throw BusinessException.forbidden('Solo puede solicitar cambios sobre sus propios turnos');
+    if (requester.employeeId === input.targetEmployeeId)
+      throw BusinessException.validation('El companero del intercambio debe ser otra persona');
+
+    if (input.targetAssignmentId) {
+      const target = await this.assignmentOrFail(ctx.companyId, input.targetAssignmentId);
+      if (target.employeeId !== input.targetEmployeeId)
+        throw BusinessException.validation('El turno objetivo no pertenece al companero elegido');
+    }
+
+    const duplicate = await this.prisma.shiftSwapRequest.findFirst({
+      where: { requesterAssignmentId: requester.id, status: 'pending' },
+      select: { id: true },
+    });
+    if (duplicate)
+      throw BusinessException.conflict('Ya existe una solicitud pendiente para ese turno');
+
+    const swap = await this.prisma.shiftSwapRequest.create({
+      data: {
+        companyId: ctx.companyId,
+        requesterAssignmentId: requester.id,
+        targetEmployeeId: input.targetEmployeeId,
+        targetAssignmentId: input.targetAssignmentId ?? null,
+        reason: input.reason ?? null,
+      },
+    });
+
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: requester.employeeId },
+      select: { fullName: true },
+    });
+    await this.notifications.notify({
+      companyId: ctx.companyId,
+      employeeIds: [input.targetEmployeeId],
+      eventKey: TIME_EVENTS.SHIFT_SWAP_REQUESTED,
+      title: 'Le propusieron un intercambio de turno',
+      body: `${employee?.fullName ?? 'Un companero'} quiere intercambiar el turno ${requester.shift.name} del ${toDateKey(requester.date)}.`,
+      url: '/time/turnos',
+      entityType: 'shift_swap_request',
+      entityId: swap.id,
+      channels: ['in_app'],
+    });
+
+    return swap;
+  }
+
+  /** Approvers see every request; others only those they take part in. */
+  async listSwaps(
+    ctx: RequestContext,
+    params: { status?: WorkflowStatus; page: number; limit: number },
+  ) {
+    let participation: Record<string, unknown> = {};
+    if (!this.canDo(ctx, 'time.swap.approve')) {
+      if (!ctx.employeeId) return { rows: [], total: 0 };
+      const mine = await this.prisma.shiftAssignment.findMany({
+        where: { companyId: ctx.companyId, employeeId: ctx.employeeId },
+        select: { id: true },
+      });
+      participation = {
+        OR: [
+          { requesterAssignmentId: { in: mine.map((row) => row.id) } },
+          { targetEmployeeId: ctx.employeeId },
+        ],
+      };
+    }
+
+    const where = {
+      companyId: ctx.companyId,
+      ...(params.status ? { status: params.status } : {}),
+      ...participation,
+    };
+    const [swaps, total] = await Promise.all([
+      this.prisma.shiftSwapRequest.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (params.page - 1) * params.limit,
+        take: params.limit,
+      }),
+      this.prisma.shiftSwapRequest.count({ where }),
+    ]);
+
+    // The swap table has no relations, so the sides are resolved by hand.
+    const assignmentIds = new Set<string>();
+    const employeeIds = new Set<string>();
+    for (const swap of swaps) {
+      assignmentIds.add(swap.requesterAssignmentId);
+      if (swap.targetAssignmentId) assignmentIds.add(swap.targetAssignmentId);
+      employeeIds.add(swap.targetEmployeeId);
+    }
+    const [assignments, employees] = await Promise.all([
+      this.prisma.shiftAssignment.findMany({
+        where: { id: { in: [...assignmentIds] } },
+        include: {
+          shift: { select: { id: true, name: true, code: true, color: true } },
+          employee: { select: EMPLOYEE_SUMMARY },
+        },
+      }),
+      this.prisma.employee.findMany({
+        where: { id: { in: [...employeeIds] } },
+        select: EMPLOYEE_SUMMARY,
+      }),
+    ]);
+    const assignmentById = new Map(assignments.map((row) => [row.id, row]));
+    const employeeById = new Map(employees.map((row) => [row.id, row]));
+
+    const rows = swaps.map((swap) => ({
+      ...swap,
+      requesterAssignment: assignmentById.get(swap.requesterAssignmentId) ?? null,
+      targetAssignment: swap.targetAssignmentId
+        ? (assignmentById.get(swap.targetAssignmentId) ?? null)
+        : null,
+      targetEmployee: employeeById.get(swap.targetEmployeeId) ?? null,
+    }));
+    return { rows, total };
+  }
+
+  /**
+   * Approving moves the requester's shift to the colleague. When the request
+   * names a colleague's shift too, both shifts change hands.
+   */
+  async decideSwap(ctx: RequestContext, id: string, decision: 'approved' | 'rejected') {
+    const swap = await this.prisma.shiftSwapRequest.findFirst({
+      where: { id, companyId: ctx.companyId },
+    });
+    if (!swap) throw BusinessException.notFound('Solicitud de intercambio');
+    if (swap.status !== 'pending')
+      throw BusinessException.validation('La solicitud ya fue decidida');
+
+    const requester = await this.assignmentOrFail(ctx.companyId, swap.requesterAssignmentId);
+    const decidedData = { status: decision, decidedById: ctx.userId, decidedAt: new Date() };
+
+    if (decision === 'rejected') {
+      const rejected = await this.prisma.shiftSwapRequest.update({
+        where: { id },
+        data: decidedData,
+      });
+      await this.notifySwapDecision(ctx.companyId, requester.employeeId, rejected.id, decision);
+      return rejected;
+    }
+
+    const target = swap.targetAssignmentId
+      ? await this.assignmentOrFail(ctx.companyId, swap.targetAssignmentId)
+      : null;
+
+    const taken = await this.prisma.shiftAssignment.findFirst({
+      where: {
+        employeeId: swap.targetEmployeeId,
+        date: requester.date,
+        shiftId: requester.shiftId,
+        ...(target ? { id: { not: target.id } } : {}),
+      },
+      select: { id: true },
+    });
+    if (taken) throw BusinessException.conflict('El companero ya tiene ese mismo turno ese dia');
+
+    const approved = await this.prisma.$transaction(async (tx) => {
+      await tx.shiftAssignment.update({
+        where: { id: requester.id },
+        data: { employeeId: swap.targetEmployeeId },
+      });
+      if (target) {
+        await tx.shiftAssignment.update({
+          where: { id: target.id },
+          data: { employeeId: requester.employeeId },
+        });
+      }
+      return tx.shiftSwapRequest.update({ where: { id }, data: decidedData });
+    });
+
+    await this.notifySwapDecision(ctx.companyId, requester.employeeId, approved.id, decision);
+    if (target) {
+      await this.notifySwapDecision(ctx.companyId, swap.targetEmployeeId, approved.id, decision);
+    }
+    return approved;
+  }
+
+  private async notifySwapDecision(
+    companyId: string,
+    employeeId: string,
+    swapId: string,
+    decision: 'approved' | 'rejected',
+  ) {
+    await this.notifications.notify({
+      companyId,
+      employeeIds: [employeeId],
+      eventKey: TIME_EVENTS.SHIFT_SWAP_DECIDED,
+      title:
+        decision === 'approved'
+          ? 'Su intercambio de turno fue aprobado'
+          : 'Su intercambio de turno fue rechazado',
+      url: '/time/turnos',
+      entityType: 'shift_swap_request',
+      entityId: swapId,
+      channels: ['in_app'],
     });
   }
 

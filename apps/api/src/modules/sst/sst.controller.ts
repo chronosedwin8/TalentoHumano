@@ -13,8 +13,9 @@ import {
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged } from '../../common/utils/crud';
+import { defined, enumQuery, listPaged } from '../../common/utils/crud';
 import { paged, parsePage } from '../../common/utils/pagination';
+import { MedicalExamKind } from '@prisma/client';
 
 const examSchema = z.object({
   employeeId: uuid,
@@ -96,7 +97,7 @@ export class SstController {
       companyId: ctx.companyId,
       deletedAt: null,
       ...(query.employeeId ? { employeeId: query.employeeId } : {}),
-      ...(query.kind ? { kind: query.kind as never } : {}),
+      ...(query.kind ? { kind: enumQuery(query.kind, MedicalExamKind, 'kind') } : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.medicalExam.findMany({

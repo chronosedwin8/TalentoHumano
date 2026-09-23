@@ -13,6 +13,9 @@ interface WebhookJob {
  * Outbound integrations: signed webhooks per domain event and API keys scoped
  * to a permission list, for biometric clocks, external payroll and BI tools.
  */
+/** Attempts per delivery, including the first one. */
+const WEBHOOK_MAX_ATTEMPTS = 5;
+
 @Injectable()
 export class IntegrationsService {
   private readonly logger = new Logger(IntegrationsService.name);
@@ -65,6 +68,7 @@ export class IntegrationsService {
       include: { webhook: true },
     });
     if (!delivery || delivery.status === 'sent') return;
+    const attempt = delivery.attempts + 1;
 
     const body = JSON.stringify({
       event: delivery.event,
@@ -94,6 +98,7 @@ export class IntegrationsService {
           error: response.ok ? null : `HTTP ${response.status}`,
         },
       });
+      if (!response.ok) await this.scheduleRetry(delivery.id, attempt);
     } catch (error) {
       await this.prisma.webhookDelivery.update({
         where: { id: delivery.id },
@@ -103,7 +108,18 @@ export class IntegrationsService {
           error: (error as Error).message.slice(0, 1000),
         },
       });
+      await this.scheduleRetry(delivery.id, attempt);
     }
+  }
+
+  /**
+   * Exponential backoff: 30 s, 1 min, 2 min, 4 min. After the last attempt the
+   * delivery stays `failed` and the integrations screen shows it as such.
+   */
+  private async scheduleRetry(deliveryId: string, attempt: number): Promise<void> {
+    if (attempt >= WEBHOOK_MAX_ATTEMPTS) return;
+    const delayMs = 30_000 * 2 ** (attempt - 1);
+    await this.queue.add(QUEUES.WEBHOOKS, 'send', { deliveryId }, { delayMs });
   }
 
   /* ------------------------------ api keys ------------------------------ */

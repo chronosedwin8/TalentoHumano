@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
+import { QueueService } from './core/queue/queue.service';
 
 async function bootstrap(): Promise<void> {
   const app = configureApp(await NestFactory.create(AppModule, { bufferLogs: false }));
@@ -14,7 +15,7 @@ async function bootstrap(): Promise<void> {
   const port = config.get<number>('env.API_PORT') ?? 3000;
   const isProduction = config.get<string>('env.NODE_ENV') === 'production';
 
-  if (!isProduction || process.env.SWAGGER_ENABLED === 'true') {
+  if (!isProduction || config.get<boolean>('env.SWAGGER_ENABLED')) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('TALENTO API')
       .setDescription(
@@ -34,6 +35,13 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
   await app.listen(port, '0.0.0.0');
+
+  // With Redis enabled the jobs only run if some process consumes the
+  // queues. By default the API consumes them itself; QUEUE_WORKERS=false
+  // leaves that to dedicated worker processes (node dist/worker.js).
+  if (config.get<boolean>('env.QUEUE_WORKERS')) {
+    await app.get(QueueService).startWorkers();
+  }
   logger.log(`TALENTO API listening on http://localhost:${port}/${prefix}/v1`);
 }
 

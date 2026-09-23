@@ -12,6 +12,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { CoreModule } from './core/core.module';
+import { SchedulerModule } from './core/scheduler/scheduler.module';
 import { HealthController } from './health.controller';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CommunicationModule } from './modules/communication/communication.module';
@@ -65,6 +66,8 @@ import { TimeModule } from './modules/time/time.module';
     AnalyticsModule,
     PortalModule,
     PublicModule,
+    // Last: it depends on the feature modules above.
+    SchedulerModule,
   ],
   controllers: [HealthController],
   providers: [

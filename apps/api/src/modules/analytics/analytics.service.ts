@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Gender, Prisma } from '@prisma/client';
 import {
   ageBand,
   percent,
@@ -12,6 +12,7 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
 import { ScopeService } from '../../core/access/scope.service';
+import { enumQuery } from '../../common/utils/crud';
 
 /** Safe datasets exposed to the report builder (no raw SQL from the client). */
 export const DATASETS: Record<
@@ -127,7 +128,7 @@ export class AnalyticsService {
       ...(filters.departmentId ? { departmentId: filters.departmentId } : {}),
       ...(filters.locationId ? { locationId: filters.locationId } : {}),
       ...(filters.positionId ? { positionId: filters.positionId } : {}),
-      ...(filters.gender ? { gender: filters.gender as never } : {}),
+      ...(filters.gender ? { gender: enumQuery(filters.gender, Gender, 'gender') } : {}),
     };
 
     const [
@@ -457,7 +458,7 @@ export class AnalyticsService {
    * promotion, low engagement and no recent training all add up. It is a
    * flag for a conversation, never an automatic decision.
    */
-  async computeTurnoverRisk(companyId: string) {
+  async computeTurnoverRisk(companyId: string, options: { persist?: boolean } = {}) {
     const employees = await this.prisma.employee.findMany({
       where: { companyId, deletedAt: null, status: 'active' },
       select: {
@@ -465,6 +466,7 @@ export class AnalyticsService {
         fullName: true,
         hiredAt: true,
         departmentId: true,
+        department: { select: { name: true } },
         movements: { select: { effectiveDate: true, movementType: true } },
         leaveRequests: {
           where: { status: { in: ['approved', 'taken'] } },
@@ -525,48 +527,70 @@ export class AnalyticsService {
         results.push({
           employeeId: employee.id,
           fullName: employee.fullName,
+          department: employee.department?.name ?? null,
           score: Math.min(100, score),
           reasons,
         });
       }
     }
 
-    // Persist as alerts so they show up in the dashboard and can be resolved.
-    for (const result of results.slice(0, 200)) {
-      await this.prisma.analyticsAlert.upsert({
-        where: {
-          id:
-            (
-              await this.prisma.analyticsAlert.findFirst({
-                where: {
-                  companyId,
-                  kind: 'turnover_risk',
-                  entityId: result.employeeId,
-                  isResolved: false,
-                },
-                select: { id: true },
-              })
-            )?.id ?? '00000000-0000-0000-0000-000000000000',
-        },
-        create: {
-          companyId,
-          kind: 'turnover_risk',
-          severity: result.score >= 70 ? 'high' : 'medium',
-          title: `Riesgo de rotacion: ${result.fullName}`,
-          detail: result.reasons.join(' | '),
-          entityType: 'employee',
-          entityId: result.employeeId,
-          score: new Prisma.Decimal(result.score),
-        },
-        update: {
-          severity: result.score >= 70 ? 'high' : 'medium',
-          detail: result.reasons.join(' | '),
-          score: new Prisma.Decimal(result.score),
-        },
-      });
-    }
+    results.sort((a, b) => b.score - a.score);
+    if (options.persist) await this.persistTurnoverAlerts(companyId, results.slice(0, 200));
+    return results;
+  }
 
-    return results.sort((a, b) => b.score - a.score);
+  /**
+   * Persists the risks as alerts so they show up in the dashboard and can be
+   * resolved. Called from the alerts job, never from a GET: two round trips
+   * for the whole batch instead of two per employee.
+   */
+  private async persistTurnoverAlerts(
+    companyId: string,
+    results: Array<{ employeeId: string; fullName: string; score: number; reasons: string[] }>,
+  ) {
+    if (!results.length) return;
+    const open = await this.prisma.analyticsAlert.findMany({
+      where: {
+        companyId,
+        kind: 'turnover_risk',
+        isResolved: false,
+        entityId: { in: results.map((r) => r.employeeId) },
+      },
+      select: { id: true, entityId: true },
+    });
+    const openByEmployee = new Map(open.map((alert) => [alert.entityId, alert.id]));
+    const updates = results
+      .filter((r) => openByEmployee.has(r.employeeId))
+      .map((r) =>
+        this.prisma.analyticsAlert.update({
+          where: { id: openByEmployee.get(r.employeeId) as string },
+          data: {
+            severity: r.score >= 70 ? 'high' : 'medium',
+            detail: r.reasons.join(' | '),
+            score: new Prisma.Decimal(r.score),
+          },
+        }),
+      );
+    const creates = results.filter((r) => !openByEmployee.has(r.employeeId));
+    await this.prisma.$transaction([
+      ...updates,
+      ...(creates.length
+        ? [
+            this.prisma.analyticsAlert.createMany({
+              data: creates.map((r) => ({
+                companyId,
+                kind: 'turnover_risk',
+                severity: r.score >= 70 ? 'high' : 'medium',
+                title: `Riesgo de rotacion: ${r.fullName}`,
+                detail: r.reasons.join(' | '),
+                entityType: 'employee',
+                entityId: r.employeeId,
+                score: new Prisma.Decimal(r.score),
+              })),
+            }),
+          ]
+        : []),
+    ]);
   }
 
   /** Expiry alerts: documents, contracts, medical exams, certifications. */

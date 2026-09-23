@@ -12,16 +12,17 @@ fail() { printf '\n\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [[ -f .env ]] || fail "falta el archivo .env en la raiz del repositorio"
 
-# A deploy that cannot be rolled back is not a deploy.
-log "Respaldando la base de datos antes de migrar"
-"$ROOT/infra/scripts/backup.sh" --tag "pre-deploy"
-
 log "Construyendo las imagenes"
 $COMPOSE build --pull
 
 log "Levantando la base de datos y la cache"
 $COMPOSE up -d postgres redis
 $COMPOSE exec -T postgres sh -c 'until pg_isready -q; do sleep 1; done'
+
+# A deploy that cannot be rolled back is not a deploy. On the very first
+# deploy the database is empty and the dump is trivial, which is fine.
+log "Respaldando la base de datos antes de migrar"
+"$ROOT/infra/scripts/backup.sh" --tag "pre-deploy"
 
 # Migrations run once, from a throwaway container, before any instance starts
 # serving with the new schema.

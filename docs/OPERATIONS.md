@@ -18,7 +18,7 @@ Complete `.env`. Estas cuatro no pueden quedar con el valor de ejemplo:
 
 ```bash
 # Genere cada una por separado:
-openssl rand -hex 32   # JWT_SECRET
+openssl rand -hex 32   # JWT_ACCESS_SECRET
 openssl rand -hex 32   # JWT_REFRESH_SECRET
 openssl rand -hex 32   # COOKIE_SECRET
 openssl rand -hex 32   # ENCRYPTION_KEY  <- ver la advertencia de abajo
@@ -118,15 +118,28 @@ docker compose -f infra/docker-compose.prod.yml logs -f nginx
 
 ## Tareas periodicas
 
-Estas operaciones se disparan por endpoint para que queden auditadas y bajo
-control de quien las ejecuta:
+La API trae su propio planificador (`SchedulerService`). Cada trabajo toma un
+candado consultivo de PostgreSQL, asi que con varias replicas lo corre una
+sola. Horas en UTC (07:00 UTC son las 02:00 en Bogota):
 
-| Endpoint | Para que | Sugerido |
+| Trabajo | Cuando | Que hace |
 |---|---|---|
-| `POST /analytics/snapshots/run` | Foto diaria de indicadores | Diario |
-| `POST /analytics/alerts/run` | Vencimientos y riesgo de rotacion | Diario |
-| `POST /onboarding/reminders/run` | Recordatorios de tareas de ingreso | Diario |
-| `POST /recruiting/retention/anonymize` | Anonimizar candidatos vencidos | Mensual |
+| `analytics.daily` | 07:00 | Snapshot de indicadores, alertas de vencimiento y riesgo de rotacion |
+| `onboarding.reminders` | 12:00 | Recordatorios de tareas y escalamiento a Talento Humano de las vencidas |
+| `workflows.sla` | cada hora | Recordatorio al aprobador y luego escalamiento al usuario configurado |
+| `ethics.sla` | 12:30 | Aviso a los oficiales de etica de denuncias fuera de plazo |
+| `reports.schedules` | cada 15 min | Reportes programados que ya vencieron (CSV por correo) |
+| `recruiting.retention` | dia 1, 08:00 | Anonimizacion de candidatos con retencion vencida |
+
+Las mismas operaciones siguen disponibles por endpoint para ejecutarlas a
+mano y que queden auditadas con su actor:
+
+| Endpoint | Para que |
+|---|---|
+| `POST /analytics/snapshots/run` | Foto diaria de indicadores |
+| `POST /analytics/alerts/run` | Vencimientos y riesgo de rotacion |
+| `POST /onboarding/reminders/run` | Recordatorios y escalamiento de tareas de ingreso |
+| `POST /recruiting/retention/anonymize` | Anonimizar candidatos vencidos |
 
 ## Escalar
 
@@ -135,6 +148,13 @@ condiciones:
 
 1. `REDIS_ENABLED=true`, para que los trabajos no se dupliquen entre replicas.
 2. `STORAGE_DRIVER=s3`, para que todas vean los mismos archivos.
+
+Por defecto cada replica de la API tambien consume las colas. Para separar
+los consumidores, arranque las replicas con `QUEUE_WORKERS=false` y corra
+uno o mas contenedores con `node dist/worker.js` (misma imagen, mismo `.env`).
+La API exige en produccion (`NODE_ENV=production`) que `COOKIE_SECURE=true` y
+que ningun secreto conserve el valor de ejemplo; si no, no arranca y el log
+indica cual falta.
 
 ## Problemas frecuentes
 

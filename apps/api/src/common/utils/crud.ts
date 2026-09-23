@@ -60,7 +60,28 @@ export async function findOrFail<T = any>(
   return row as T;
 }
 
-/** Marks a record as deleted instead of removing it. */
+/**
+ * Validates an enum taken from the query string. Prisma rejects unknown
+ * enum values with a generic validation error; this names the field instead.
+ */
+export function enumQuery<T extends string>(
+  value: string | undefined,
+  allowed: Readonly<Record<string, T>>,
+  field: string,
+): T | undefined {
+  if (value === undefined || value === '') return undefined;
+  const values = Object.values(allowed);
+  if (!values.includes(value as T)) {
+    throw BusinessException.validation(`Valor no valido para ${field}`, { field, allowed: values });
+  }
+  return value as T;
+}
+
+/**
+ * Marks a record as deleted instead of removing it. Pass `userId` only for
+ * models that have an `updatedById` column; the audit log records the actor
+ * for the rest.
+ */
 export async function softDelete(
   delegate: PrismaDelegate,
   id: string,

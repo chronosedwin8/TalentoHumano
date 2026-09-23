@@ -188,6 +188,63 @@ export class LeavesService {
     return { year, ...summary, availableDays: availableLeaveDays(summary) };
   }
 
+  /**
+   * Balances for a whole listing, in four queries instead of seven per
+   * employee. Taken, pending and adjusted days are recalculated whenever a
+   * request or an adjustment changes, so the stored rows are current for
+   * those; the accrual grows with the calendar, so it is recomputed here.
+   * Employees without a row for the year get one computed and stored.
+   */
+  async balancesFor(companyId: string, employeeIds: string[], year: number) {
+    const result = new Map<string, Awaited<ReturnType<LeavesService['balanceFor']>>>();
+    if (!employeeIds.length) return result;
+    const vacationType = await this.prisma.leaveType.findFirst({
+      where: { companyId, code: 'vacaciones', deletedAt: null },
+      select: { id: true },
+    });
+    if (!vacationType) return result;
+    const [stored, employees, policy] = await Promise.all([
+      this.prisma.leaveBalance.findMany({
+        where: { companyId, leaveTypeId: vacationType.id, year, employeeId: { in: employeeIds } },
+      }),
+      this.prisma.employee.findMany({
+        where: { companyId, id: { in: employeeIds } },
+        select: { id: true, hiredAt: true, terminatedAt: true },
+      }),
+      this.prisma.leavePolicy.findFirst({ where: { companyId, isDefault: true, deletedAt: null } }),
+    ]);
+    const daysPerYear = policy ? Number(policy.daysPerYear) : CO_VACATION_DAYS_PER_YEAR;
+    const byEmployee = new Map(employees.map((employee) => [employee.id, employee]));
+    for (const balance of stored) {
+      const employee = byEmployee.get(balance.employeeId);
+      const summary = {
+        accruedDays: employee
+          ? accrueVacationDays({
+              hiredAt: employee.hiredAt,
+              terminatedAt: employee.terminatedAt,
+              year,
+              daysPerYear,
+            })
+          : Number(balance.accruedDays),
+        takenDays: Number(balance.takenDays),
+        pendingDays: Number(balance.pendingDays),
+        adjustedDays: Number(balance.adjustedDays),
+        carryOverDays: Number(balance.carryOverDays),
+      };
+      result.set(balance.employeeId, {
+        year,
+        ...summary,
+        availableDays: availableLeaveDays(summary),
+      });
+    }
+    // First sight of an employee for this year: compute and store it once.
+    const missing = employeeIds.filter((id) => !result.has(id));
+    for (const employeeId of missing) {
+      result.set(employeeId, await this.balanceFor(companyId, employeeId, year));
+    }
+    return result;
+  }
+
   async adjustBalance(
     ctx: RequestContext,
     input: { employeeId: string; days: number; reason: string; year?: number },

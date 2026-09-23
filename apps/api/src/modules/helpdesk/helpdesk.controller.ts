@@ -115,7 +115,8 @@ export class HelpdeskController {
     if (!ticket) throw BusinessException.notFound('Ticket');
 
     const isOwn =
-      ticket.requesterUserId === ctx.userId || ticket.assigneeEmployeeId === ctx.employeeId;
+      ticket.requesterUserId === ctx.userId ||
+      (ctx.employeeId !== null && ticket.assigneeEmployeeId === ctx.employeeId);
     const canSeeAll = this.scope.scopeFor(ctx, 'helpdesk.ticket.read') === 'company';
     if (!isOwn && !canSeeAll) throw BusinessException.outOfScope();
 

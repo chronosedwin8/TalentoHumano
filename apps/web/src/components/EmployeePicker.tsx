@@ -10,7 +10,12 @@ export interface PickableEmployee {
   id: string;
   fullName: string;
   employeeCode: string;
-  position: string | null;
+  position: { id: string; name: string } | string | null;
+}
+
+function positionName(position: PickableEmployee['position']): string | null {
+  if (!position) return null;
+  return typeof position === 'string' ? position : position.name;
 }
 
 interface EmployeePickerProps {
@@ -65,6 +70,7 @@ export function EmployeePicker({
 
   React.useEffect(() => {
     if (!value) setSelected(null);
+    else if (selected && selected.id !== value) setSelected(null);
     else if (!selected && current?.data?.[0]) setSelected(current.data[0]);
   }, [value, current, selected]);
 
@@ -138,7 +144,7 @@ export function EmployeePicker({
                   <span className="block truncate">{employee.fullName}</span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {employee.employeeCode}
-                    {employee.position ? ` · ${employee.position}` : ''}
+                    {positionName(employee.position) ? ` · ${positionName(employee.position)}` : ''}
                   </span>
                 </span>
                 {value === employee.id ? <Check className="h-4 w-4 text-primary" /> : null}

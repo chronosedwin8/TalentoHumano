@@ -2,6 +2,114 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/).
 
+## [1.1.0] — 2026-09-23
+
+Revision de salida a produccion: auditoria de la especificacion modulo por
+modulo, caceria de defectos en API y web, y verificacion real del despliegue
+(construccion y arranque de las imagenes). Lo encontrado se corrigio; lo que
+sigue abierto esta en `docs/ACCEPTANCE.md` y en `PLAN.md`.
+
+### Corregido
+
+- **Descargas con almacenamiento local siempre fallaban.** La ruta publica
+  `GET /files/download` estaba declarada despues de `GET /files/:id`, asi que
+  Express la atrapaba con el guard de sesion y el validador de uuid. Ahora se
+  registra antes y hay prueba de regresion.
+- **Diez eliminaciones respondian 422.** `softDelete` escribia `updatedById`
+  en modelos que no tienen esa columna (tipos de ausencia, encuestas,
+  objetivos, plantillas, reportes, novedades, campos personalizados, centros
+  de costo, documentos del legajo). Se quito el argumento en esos casos; la
+  auditoria conserva quien elimino.
+- **Acuses de politica y actualizacion de vacantes.** `PolicyAcknowledgement`
+  no tiene relacion `employee` (se une en una segunda consulta) y
+  `competencyIds` no es una columna de la vacante (se guarda como relacion).
+- **Selector de colaborador.** `ids` y `scope=team` no existian en la API:
+  el selector mostraba a la primera persona por orden alfabetico en vez de la
+  seleccionada, y el modo equipo listaba a toda la empresa. Ademas `position`
+  llega como objeto y dos dialogos (generar documento, asignar ticket) se
+  caian al renderizarlo.
+- **Campos que el web leia y la API no devuelve:** `alert.description`
+  (es `detail`), `risk.factors` (es `reasons`, y la pestana de riesgo de
+  rotacion rompia toda la pagina de analitica), `row.actor`/`row.ipAddress`
+  en auditoria (son `actorEmail`/`ip`: el usuario siempre salia "Sistema").
+- **Literales que no coincidian con los enums:** el filtro de modalidad del
+  portal de empleo (`presencial/hibrido/remoto` contra `onsite/hybrid/remote`)
+  dejaba el portal vacio; las entregas de webhook exitosas se pintaban en rojo
+  (`success` contra `sent`).
+- **Autoguardado del editor de lecciones** sobreescribia lo tecleado entre el
+  guardado y el refetch. El servidor solo siembra el editor una vez por
+  leccion.
+- **Correo personal vacio** en "Mi perfil" devolvia 422: ahora se envia `null`.
+- **Ticket sin asignar visible para usuarios sin colaborador:** `null === null`
+  en la comparacion de asignado concedia acceso.
+- **Filtros de enumeraciones** (`status`, `kind`, `gender`) sin validar
+  producian un 422 generico de Prisma; ahora responden con el campo y los
+  valores permitidos (`enumQuery`).
+- **N+1 en rutas calientes:** `GET /leaves/balances` hacia siete consultas por
+  colaborador (hasta 3500 en una peticion) y escribia en cada lectura; ahora
+  lee los saldos almacenados en cuatro consultas y solo recalcula el devengo.
+  `GET /analytics/turnover-risk` ya no persiste alertas (lo hace
+  `POST /analytics/alerts/run`, por lotes) y el legajo carga los archivos en
+  una sola consulta.
+- **`/health` devolvia 200 con la base de datos caida.** Ahora 503, que es lo
+  que leen el `HEALTHCHECK` de Docker y `deploy.sh`.
+- **Errores de Prisma sin mapear:** la restriccion de exclusion de ausencias
+  llega como `PrismaClientUnknownRequestError` (ahora 409 `LEAVE_OVERLAP`) y la
+  base inaccesible como error de inicializacion (ahora 503).
+
+### Motores
+
+- **Planificador.** No existia ningun `@Cron`: recordatorios, escalamientos,
+  snapshots, reportes programados y anonimizacion solo corrian a mano. Ahora
+  `SchedulerService` los ejecuta con un candado consultivo de PostgreSQL para
+  que una sola replica los corra: snapshot y alertas diarias, recordatorios y
+  escalamiento de onboarding, SLA de aprobaciones (recordatorio y luego
+  escalamiento al usuario configurado), denuncias fuera de plazo, reportes
+  programados (con lector de cron propio) y retencion de candidatos.
+- **Las API keys ahora autentican.** Se creaban pero ningun guard las aceptaba.
+  `X-Api-Key` resuelve un contexto con los permisos de la clave a alcance de
+  empresa, sin sesion.
+- **Webhooks con reintentos:** cinco intentos con retroceso exponencial.
+- **Tiempo real en el cliente:** `socket.io-client` estaba instalado y sin
+  usar. Las notificaciones llegan sin sondeo y los tickets se refrescan al
+  recibir mensajes.
+- **Trabajos en cola:** con `REDIS_ENABLED=true` nadie consumia las colas
+  (`startWorkers` no se llamaba y `dist/worker.js` no existia). La API los
+  consume por defecto (`QUEUE_WORKERS`) y hay un proceso dedicado.
+
+### API
+
+- Importacion masiva desde Excel real (`{ fileId }` ademas de `{ rows }`, con
+  ensayo), plantilla XLSX con hoja de catalogos y exportacion XLSX del listado
+  sin columnas sensibles.
+- Reclutamiento: ficha del candidato, detalle de entrevista con evaluacion
+  ciega, listado y envio real de ofertas por correo con enlace de respuesta,
+  correos automaticos por etapa, referidos desde la sesion, configuracion de
+  etapas con proteccion de las que tienen historial.
+- Plantillas de notificacion por empresa (`/notifications/templates`),
+  sesiones de otros usuarios para administradores, delegaciones con nombres.
+- Pre-ingreso: el nuevo colaborador completa datos de contacto, sube documentos
+  y cierra sus tareas con el enlace temporal; el ingreso inscribe en los cursos
+  de las tareas, crea seguimientos 30/60/90 y escala tareas vencidas.
+- Tiempo: publicacion de turnos con aviso, exportacion CSV de asistencia y
+  resumen de teletrabajo.
+
+### Despliegue
+
+- **La imagen de la API no arrancaba** (`Cannot find module 'zod'`): el
+  `Dockerfile` no copiaba `packages/shared/node_modules`. Ahora hay una etapa
+  de dependencias de produccion y `prisma` es dependencia de ejecucion para
+  `migrate deploy`.
+- `.dockerignore` (los `node_modules` del host, junctions en Windows, rompian
+  `tsc` dentro del build y `.env` entraba al contexto).
+- `docker-compose.prod.yml` pasaba `JWT_SECRET` y `SMTP_PASSWORD`; el codigo
+  lee `JWT_ACCESS_SECRET` y `SMTP_PASS`. CI tenia el mismo error en los dos
+  jobs e2e.
+- `deploy.sh` respaldaba antes de levantar PostgreSQL (fallaba en el primer
+  despliegue). Nombres de proyecto distintos para los compose de desarrollo y
+  produccion. CI arranca la imagen construida y consulta `/health`.
+- En produccion la API rechaza los secretos de ejemplo y exige `COOKIE_SECURE`.
+
 ## [1.0.0] — 2026-09-22
 
 Primera version completa de la plataforma.

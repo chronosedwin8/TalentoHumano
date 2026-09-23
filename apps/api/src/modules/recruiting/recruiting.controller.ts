@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  emailSchema,
   hireCandidateSchema,
   isoDateTime,
   jobPostingSchema,
@@ -64,6 +65,20 @@ const stageSchema = z.object({
       }),
     )
     .min(2),
+});
+
+const referralSchema = z.object({
+  jobPostingId: uuid,
+  firstName: z.string().trim().min(2).max(80),
+  lastName: z.string().trim().min(2).max(80),
+  email: emailSchema,
+  phone: z.string().trim().min(6).max(40),
+  city: z.string().trim().max(120).nullable().optional(),
+  linkedinUrl: z.string().url().max(240).nullable().optional().or(z.literal('')),
+  coverLetter: z.string().trim().max(8000).nullable().optional(),
+  consentAccepted: z.literal(true, {
+    errorMap: () => ({ message: 'El candidato debe autorizar el tratamiento de sus datos' }),
+  }),
 });
 
 @ApiTags('reclutamiento')
@@ -212,7 +227,7 @@ export class RecruitingController {
     @Body(new ZodValidationPipe(jobPostingSchema.partial())) dto: Record<string, any>,
   ) {
     const db = this.prisma.forCompany(ctx.companyId);
-    const { salaryRangeMin, salaryRangeMax, closesAt, ...rest } = dto;
+    const { salaryRangeMin, salaryRangeMax, closesAt, competencyIds, ...rest } = dto;
     await db.jobPosting.updateMany({
       where: { id },
       data: {
@@ -226,6 +241,15 @@ export class RecruitingController {
           : {}),
       } as never,
     });
+    if (Array.isArray(competencyIds)) {
+      await db.jobCompetency.deleteMany({ where: { jobPostingId: id } });
+      if (competencyIds.length) {
+        await db.jobCompetency.createMany({
+          data: competencyIds.map((competencyId: string) => ({ jobPostingId: id, competencyId })),
+          skipDuplicates: true,
+        });
+      }
+    }
     return db.jobPosting.findFirst({ where: { id } });
   }
 
@@ -264,6 +288,28 @@ export class RecruitingController {
     @Body(new ZodValidationPipe(stageSchema)) dto: z.infer<typeof stageSchema>,
   ) {
     const db = this.prisma.forCompany(ctx.companyId);
+
+    // Stages left out of the list are removed, but only when nothing points at
+    // them: a stage with applications or history would leave orphans.
+    const keptIds = dto.stages.map((stage) => stage.id).filter(Boolean) as string[];
+    const removed = await db.pipelineStage.findMany({
+      where: { jobPostingId: id, id: { notIn: keptIds } },
+      include: { _count: { select: { applications: true, history: true } } },
+    });
+    const blocked = removed.find(
+      (stage) => stage._count.applications > 0 || stage._count.history > 0,
+    );
+    if (blocked) {
+      throw BusinessException.validation(
+        `La etapa "${blocked.name}" tiene postulaciones o historial y no puede eliminarse`,
+      );
+    }
+    if (removed.length) {
+      await db.pipelineStage.deleteMany({
+        where: { jobPostingId: id, id: { in: removed.map((stage) => stage.id) } },
+      });
+    }
+
     for (const [index, stage] of dto.stages.entries()) {
       if (stage.id) {
         await db.pipelineStage.updateMany({
@@ -421,6 +467,53 @@ export class RecruitingController {
     });
   }
 
+  @Get('candidates/:id')
+  @RequirePermission('recruiting.candidate.read')
+  @ApiOperation({ summary: 'Ficha del candidato con sus postulaciones y referidos' })
+  async candidate(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
+    const db = this.prisma.forCompany(ctx.companyId);
+    const candidate = await db.candidate.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        tags: true,
+        documents: true,
+        applications: {
+          where: { deletedAt: null },
+          include: {
+            jobPosting: { select: { id: true, title: true, code: true, status: true } },
+            stage: { select: { id: true, name: true, color: true, kind: true } },
+            _count: { select: { interviews: true, offers: true } },
+          },
+          orderBy: { appliedAt: 'desc' },
+        },
+        referrals: {
+          include: { employee: { select: { id: true, fullName: true } } },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    if (!candidate) throw BusinessException.notFound('Candidato');
+
+    const [referredBy, hiredEmployee] = await Promise.all([
+      candidate.referredByEmployeeId
+        ? db.employee.findFirst({
+            where: { id: candidate.referredByEmployeeId },
+            select: { id: true, fullName: true },
+          })
+        : null,
+      candidate.hiredEmployeeId
+        ? db.employee.findFirst({
+            where: { id: candidate.hiredEmployeeId },
+            select: { id: true, fullName: true, employeeCode: true },
+          })
+        : null,
+    ]);
+    return { ...candidate, referredBy, hiredEmployee };
+  }
+
   @Patch('candidates/:id')
   @RequirePermission('recruiting.candidate.update')
   @Audit({ entityType: 'candidate' })
@@ -510,12 +603,82 @@ export class RecruitingController {
           : {}),
       },
       include: {
-        application: { include: { candidate: { select: { fullName: true, email: true } } } },
-        participants: true,
+        application: {
+          select: {
+            id: true,
+            candidate: { select: { id: true, fullName: true, email: true } },
+            jobPosting: { select: { id: true, title: true, code: true } },
+          },
+        },
+        participants: { include: { employee: { select: { id: true, fullName: true } } } },
+        _count: { select: { feedback: true } },
       },
       defaultSort: { scheduledAt: 'asc' },
       sortable: ['scheduledAt'],
     });
+  }
+
+  @Get('interviews/:id')
+  @RequirePermission('recruiting.interview.read')
+  @ApiOperation({ summary: 'Detalle de la entrevista con sus tarjetas de evaluacion' })
+  async interview(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
+    const interview = await this.prisma.forCompany(ctx.companyId).interview.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        application: {
+          select: {
+            id: true,
+            candidate: { select: { id: true, fullName: true, email: true } },
+            jobPosting: {
+              select: {
+                id: true,
+                title: true,
+                code: true,
+                competencies: {
+                  select: { competency: { select: { id: true, name: true, category: true } } },
+                },
+              },
+            },
+          },
+        },
+        participants: { include: { employee: { select: { id: true, fullName: true } } } },
+        feedback: {
+          include: { ratings: { include: { competency: { select: { id: true, name: true } } } } },
+          orderBy: { submittedAt: 'asc' },
+        },
+      },
+    });
+    if (!interview) throw BusinessException.notFound('Entrevista');
+
+    const reviewers = await this.prisma.forCompany(ctx.companyId).employee.findMany({
+      where: { id: { in: interview.feedback.map((row) => row.reviewerEmployeeId) } },
+      select: { id: true, fullName: true },
+    });
+    const reviewerName = new Map(reviewers.map((row) => [row.id, row.fullName]));
+
+    // Blind evaluation: until every interviewer has submitted, each one only
+    // sees their own scorecard so nobody is anchored by a colleague's rating.
+    const expected = interview.participants.length;
+    const submitted = interview.feedback.length;
+    const blind = interview.blindUntilComplete && expected > 0 && submitted < expected;
+    const feedback = (
+      blind
+        ? interview.feedback.filter((row) => row.reviewerEmployeeId === ctx.employeeId)
+        : interview.feedback
+    ).map((row) => ({ ...row, reviewerName: reviewerName.get(row.reviewerEmployeeId) ?? null }));
+
+    return {
+      ...interview,
+      feedback,
+      blind,
+      submittedCount: submitted,
+      expectedCount: expected,
+      myFeedbackId:
+        interview.feedback.find((row) => row.reviewerEmployeeId === ctx.employeeId)?.id ?? null,
+    };
   }
 
   @Get('interviews/:id/ics')
@@ -605,6 +768,41 @@ export class RecruitingController {
 
   /* -------------------------------- offers ------------------------------ */
 
+  @Get('offers')
+  @RequirePermission('recruiting.offer.read')
+  @ApiOperation({ summary: 'Cartas de oferta' })
+  async offers(
+    @Ctx() ctx: RequestContext,
+    @Query() query: { page?: string; limit?: string; status?: string; jobPostingId?: string },
+  ) {
+    const result = await listPaged(this.prisma.forCompany(ctx.companyId).offer, query, {
+      where: {
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.jobPostingId ? { application: { jobPostingId: query.jobPostingId } } : {}),
+      },
+      include: {
+        application: {
+          select: {
+            id: true,
+            status: true,
+            candidate: { select: { id: true, fullName: true, email: true } },
+            jobPosting: { select: { id: true, title: true, code: true } },
+          },
+        },
+      },
+      defaultSort: { createdAt: 'desc' },
+      sortable: ['createdAt', 'sentAt', 'status'],
+    });
+    return {
+      ...result,
+      data: result.data.map((offer: Record<string, any>) => ({
+        ...offer,
+        accessToken: undefined,
+        salary: this.encryption.decryptNumber(offer.salary),
+      })),
+    };
+  }
+
   @Post('offers')
   @RequirePermission('recruiting.offer.create')
   @Audit({ entityType: 'offer' })
@@ -635,15 +833,12 @@ export class RecruitingController {
   @Post('offers/:id/send')
   @RequirePermission('recruiting.offer.send')
   @Audit({ entityType: 'offer', action: 'update' })
-  @ApiOperation({ summary: 'Envia la oferta al candidato' })
+  @ApiOperation({ summary: 'Envia la oferta al candidato por correo con su enlace de respuesta' })
   async sendOffer(
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return this.prisma.forCompany(ctx.companyId).offer.update({
-      where: { id },
-      data: { status: 'sent', sentAt: new Date() },
-    });
+    return this.recruiting.sendOffer(ctx, id);
   }
 
   /* ------------------------------- referrals ---------------------------- */
@@ -651,14 +846,52 @@ export class RecruitingController {
   @Get('referrals')
   @RequirePermission('recruiting.referral.read')
   @ApiOperation({ summary: 'Programa de referidos' })
-  async referrals(@Ctx() ctx: RequestContext, @Query() query: { page?: string; limit?: string }) {
-    return listPaged(this.prisma.forCompany(ctx.companyId).referral, query, {
+  async referrals(
+    @Ctx() ctx: RequestContext,
+    @Query() query: { page?: string; limit?: string; mine?: string },
+  ) {
+    const db = this.prisma.forCompany(ctx.companyId);
+    const result = await listPaged(db.referral, query, {
+      where: query.mine === 'true' && ctx.employeeId ? { employeeId: ctx.employeeId } : {},
       include: {
         employee: { select: { id: true, fullName: true } },
         candidate: { select: { id: true, fullName: true, email: true } },
       },
       defaultSort: { createdAt: 'desc' },
     });
+    // `referrals.job_posting_id` has no relation, so the titles are resolved here.
+    const jobIds = [
+      ...new Set(
+        result.data
+          .map((row: { jobPostingId: string | null }) => row.jobPostingId)
+          .filter(Boolean) as string[],
+      ),
+    ];
+    const jobs = jobIds.length
+      ? await db.jobPosting.findMany({
+          where: { id: { in: jobIds } },
+          select: { id: true, title: true, code: true },
+        })
+      : [];
+    const jobById = new Map(jobs.map((job) => [job.id, job]));
+    return {
+      ...result,
+      data: result.data.map((row: { jobPostingId: string | null }) => ({
+        ...row,
+        jobPosting: row.jobPostingId ? (jobById.get(row.jobPostingId) ?? null) : null,
+      })),
+    };
+  }
+
+  @Post('referrals')
+  @RequirePermission('recruiting.referral.create')
+  @Audit({ entityType: 'referral' })
+  @ApiOperation({ summary: 'Un colaborador refiere a un candidato para una vacante publicada' })
+  async createReferral(
+    @Ctx() ctx: RequestContext,
+    @Body(new ZodValidationPipe(referralSchema)) dto: z.infer<typeof referralSchema>,
+  ) {
+    return this.recruiting.refer(ctx, dto);
   }
 
   /* --------------------------------- KPIs ------------------------------- */

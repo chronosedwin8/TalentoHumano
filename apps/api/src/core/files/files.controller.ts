@@ -39,22 +39,13 @@ export class FilesController {
     return this.files.present(file);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Metadatos y URL temporal de descarga' })
-  async findOne(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
-    const file = await this.files.findById(ctx.companyId, id);
-    return this.files.present(file);
-  }
-
-  @Delete(':id')
-  @ApiOperation({ summary: 'Elimina logicamente un archivo' })
-  async remove(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
-    return this.files.softDelete(ctx, id);
-  }
-
   /* ------------------------------------------------------------------ *
    * Local storage driver endpoints. With STORAGE_DRIVER=s3 the browser
    * talks to S3/MinIO directly and these routes are never used.
+   *
+   * They are declared before the ':id' routes on purpose: Express matches
+   * in registration order, so 'download' would otherwise be captured by
+   * ':id' and rejected as an invalid uuid behind the auth guard.
    * ------------------------------------------------------------------ */
 
   @Public()
@@ -88,5 +79,18 @@ export class FilesController {
     }
     res.setHeader('Cache-Control', 'private, max-age=300');
     this.storage.readStream(key).pipe(res);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Metadatos y URL temporal de descarga' })
+  async findOne(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+    const file = await this.files.findById(ctx.companyId, id);
+    return this.files.present(file);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Elimina logicamente un archivo' })
+  async remove(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+    return this.files.softDelete(ctx, id);
   }
 }

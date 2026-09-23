@@ -35,15 +35,23 @@ $COMPOSE exec -T postgres pg_dump \
   --format=custom --compress=9 \
   > "$BACKUP_DIR/${NAME}.dump"
 
-log "Empaquetando los archivos subidos"
-$COMPOSE exec -T api tar -cf - -C /app/apps/api storage \
-  | gzip -9 > "$BACKUP_DIR/${NAME}-storage.tar.gz"
+# The uploads live in the API container; on the first deploy (or with the
+# API stopped) there is nothing to archive yet.
+FILES=("${NAME}.dump")
+if $COMPOSE ps --status running --services 2>/dev/null | grep -qx api; then
+  log "Empaquetando los archivos subidos"
+  $COMPOSE exec -T api tar -cf - -C /app/apps/api storage \
+    | gzip -9 > "$BACKUP_DIR/${NAME}-storage.tar.gz"
+  FILES+=("${NAME}-storage.tar.gz")
+else
+  log "La API no esta en ejecucion: se omiten los archivos subidos"
+fi
 
 # A checksum turns "the file exists" into "the file is intact".
 log "Calculando sumas de verificacion"
-( cd "$BACKUP_DIR" && sha256sum "${NAME}.dump" "${NAME}-storage.tar.gz" > "${NAME}.sha256" )
+( cd "$BACKUP_DIR" && sha256sum "${FILES[@]}" > "${NAME}.sha256" )
 
-SIZE="$(du -ch "$BACKUP_DIR/${NAME}."* "$BACKUP_DIR/${NAME}-storage.tar.gz" 2>/dev/null | tail -1 | cut -f1)"
+SIZE="$(du -ch "$BACKUP_DIR/${NAME}"* 2>/dev/null | tail -1 | cut -f1)"
 log "Respaldo ${NAME} listo (${SIZE})"
 
 log "Eliminando respaldos con mas de ${RETENTION_DAYS} dias"
@@ -53,6 +61,8 @@ find "$BACKUP_DIR" -name 'talento-*' -type f -mtime "+${RETENTION_DAYS}" -print 
 if [[ -n "${BACKUP_S3_BUCKET:-}" ]]; then
   log "Copiando a ${BACKUP_S3_BUCKET}"
   aws s3 cp "$BACKUP_DIR/${NAME}.dump" "s3://${BACKUP_S3_BUCKET}/${NAME}.dump"
-  aws s3 cp "$BACKUP_DIR/${NAME}-storage.tar.gz" "s3://${BACKUP_S3_BUCKET}/${NAME}-storage.tar.gz"
+  if [[ -f "$BACKUP_DIR/${NAME}-storage.tar.gz" ]]; then
+    aws s3 cp "$BACKUP_DIR/${NAME}-storage.tar.gz" "s3://${BACKUP_S3_BUCKET}/${NAME}-storage.tar.gz"
+  fi
   aws s3 cp "$BACKUP_DIR/${NAME}.sha256" "s3://${BACKUP_S3_BUCKET}/${NAME}.sha256"
 fi

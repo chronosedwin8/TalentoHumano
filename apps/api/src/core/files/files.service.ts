@@ -148,6 +148,20 @@ export class FilesService {
     return file;
   }
 
+  /** Batch variant of findById for listings; missing or deleted ids are skipped. */
+  async findManyById(companyId: string, fileIds: string[]) {
+    const rows = fileIds.length
+      ? await this.prisma.storedFile.findMany({
+          where: {
+            id: { in: fileIds },
+            deletedAt: null,
+            OR: [{ companyId }, { visibility: 'public' }],
+          },
+        })
+      : [];
+    return new Map(rows.map((row) => [row.id, row]));
+  }
+
   async downloadUrl(companyId: string, fileId: string): Promise<string> {
     const file = await this.findById(companyId, fileId);
     return this.storage.presignDownload(file.storageKey, 900, file.filename);

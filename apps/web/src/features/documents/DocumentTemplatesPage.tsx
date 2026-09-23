@@ -363,14 +363,16 @@ function GenerateDialog({
   const { data: employees } = useQuery({
     queryKey: ['people', 'picker', search],
     queryFn: () =>
-      apiList<{ id: string; fullName: string; employeeCode: string; position: string | null }>(
-        '/people/employees',
-        {
-          search,
-          limit: 20,
-          status: 'active',
-        },
-      ),
+      apiList<{
+        id: string;
+        fullName: string;
+        employeeCode: string;
+        position: { id: string; name: string } | null;
+      }>('/people/employees', {
+        search,
+        limit: 20,
+        status: 'active',
+      }),
   });
 
   const generate = useMutation({
@@ -419,7 +421,7 @@ function GenerateDialog({
                 <span className="min-w-0 flex-1 truncate">
                   {employee.fullName}
                   <span className="ml-2 text-xs text-muted-foreground">
-                    {employee.position ?? ''}
+                    {employee.position?.name ?? ''}
                   </span>
                 </span>
               </label>

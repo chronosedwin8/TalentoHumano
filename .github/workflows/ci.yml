@@ -76,7 +76,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/talento_test?schema=public
       NODE_ENV: test
-      JWT_SECRET: ci-jwt-secret-value-that-is-long-enough-000000
+      JWT_ACCESS_SECRET: ci-jwt-secret-value-that-is-long-enough-000000
       JWT_REFRESH_SECRET: ci-refresh-secret-value-that-is-long-enough-00
       COOKIE_SECRET: ci-cookie-secret-value-that-is-long-enough-000
       ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
@@ -130,7 +130,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/talento_test?schema=public
       NODE_ENV: test
       API_PORT: '3000'
-      JWT_SECRET: ci-jwt-secret-value-that-is-long-enough-000000
+      JWT_ACCESS_SECRET: ci-jwt-secret-value-that-is-long-enough-000000
       JWT_REFRESH_SECRET: ci-refresh-secret-value-that-is-long-enough-00
       COOKIE_SECRET: ci-cookie-secret-value-that-is-long-enough-000
       ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
@@ -167,7 +167,11 @@ jobs:
         run: |
           pnpm --filter @talento/api build
           node apps/api/dist/main.js &
-          npx wait-on http://localhost:3000/health --timeout 90000
+          for i in $(seq 1 90); do
+            curl -fsS http://localhost:3000/health >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/health
 
       - name: Instalar el navegador
         run: pnpm --filter @talento/web exec playwright install --with-deps chromium
@@ -190,6 +194,17 @@ jobs:
     name: Construir imagenes
     runs-on: ubuntu-latest
     needs: [static]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: talento_smoke
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -200,9 +215,32 @@ jobs:
           context: .
           file: apps/api/Dockerfile
           push: false
+          load: true
           tags: talento/api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Building is not enough: the image has to start and answer /health
+      # against a real database with the production configuration rules.
+      - name: Arranque de la imagen de la API
+        run: |
+          docker run -d --name api-smoke --network host \
+            -e NODE_ENV=production \
+            -e DATABASE_URL='postgresql://postgres:postgres@localhost:5432/talento_smoke?schema=public' \
+            -e JWT_ACCESS_SECRET="$(openssl rand -hex 32)" \
+            -e JWT_REFRESH_SECRET="$(openssl rand -hex 32)" \
+            -e COOKIE_SECRET="$(openssl rand -hex 32)" \
+            -e ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+            -e COOKIE_SECURE=true -e WEB_URL=https://talento.example.com \
+            -e REDIS_ENABLED=false -e MAIL_DRIVER=log \
+            talento/api:${{ github.sha }}
+          docker exec api-smoke npx prisma migrate deploy
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:3000/health >/dev/null && break
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/health || { docker logs api-smoke; exit 1; }
+          docker rm -f api-smoke
 
       - name: Imagen de la aplicacion web
         uses: docker/build-push-action@v6

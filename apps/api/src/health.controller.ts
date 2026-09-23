@@ -1,4 +1,5 @@
-import { Controller, Get, Header, VERSION_NEUTRAL } from '@nestjs/common';
+import { Controller, Get, Header, HttpStatus, Res, VERSION_NEUTRAL } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from './common/decorators';
 import { PrismaService } from './common/prisma/prisma.service';
@@ -17,7 +18,7 @@ export class HealthController {
   @Public()
   @Get('health')
   @ApiOperation({ summary: 'Estado de la API y sus dependencias' })
-  async health() {
+  async health(@Res({ passthrough: true }) res: Response) {
     let database = 'down';
     try {
       await this.prisma.$queryRaw`SELECT 1`;
@@ -25,6 +26,8 @@ export class HealthController {
     } catch {
       database = 'down';
     }
+    // Orchestrators and the Docker HEALTHCHECK only look at the status code.
+    if (database !== 'up') res.status(HttpStatus.SERVICE_UNAVAILABLE);
     return {
       status: database === 'up' ? 'ok' : 'degraded',
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),

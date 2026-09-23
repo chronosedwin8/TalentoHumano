@@ -220,7 +220,7 @@ export class SurveysController {
   @Audit({ entityType: 'survey', action: 'delete' })
   @ApiOperation({ summary: 'Archiva una encuesta' })
   async remove(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).survey, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).survey, id);
   }
 
   @Get('templates/all')

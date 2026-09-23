@@ -2,6 +2,11 @@
 #   docker compose -f infra/docker-compose.prod.yml --env-file .env up -d --build
 #
 # Every secret comes from the environment; nothing is hardcoded here.
+#
+# The explicit project name keeps this stack apart from the development one
+# (both files live in infra/), so `--remove-orphans` never touches the other.
+name: talento
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -50,26 +55,40 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-talento}?schema=public
       REDIS_ENABLED: 'true'
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      # The API consumes the queues itself. Set to 'false' and run
+      # `node dist/worker.js` in separate containers to scale consumers.
+      QUEUE_WORKERS: ${QUEUE_WORKERS:-true}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
       COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      COOKIE_SECURE: 'true'
       # Losing this key makes every encrypted column unreadable: back it up
       # separately from the database, never together with it.
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
       WEB_URL: ${WEB_URL:?set WEB_URL}
+      # Same origin as the web: nginx forwards /api to this container.
+      API_URL: ${API_URL:-${WEB_URL}}
       CORS_ORIGINS: ${WEB_URL}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
       S3_ENDPOINT: ${S3_ENDPOINT:-}
-      S3_BUCKET: ${S3_BUCKET:-}
+      S3_BUCKET: ${S3_BUCKET:-talento}
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-}
-      MAIL_DRIVER: ${MAIL_DRIVER:-smtp}
+      # 'log' until SMTP is configured, so nothing fails silently.
+      MAIL_DRIVER: ${MAIL_DRIVER:-log}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-TALENTO <no-reply@talento.local>}
+      AUTH_LOGIN_LIMIT: ${AUTH_LOGIN_LIMIT:-60}
+      AUTH_REFRESH_LIMIT: ${AUTH_REFRESH_LIMIT:-120}
+      ETHICS_REPORT_LIMIT: ${ETHICS_REPORT_LIMIT:-20}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
     volumes:
       - api-storage:/app/apps/api/storage
     networks: [internal, edge]

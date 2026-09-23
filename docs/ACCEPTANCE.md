@@ -181,9 +181,17 @@ borde, nginx con TLS y renovacion automatica del certificado.
 `infra/scripts/backup.sh` y `restore.sh` cubren el ciclo de respaldo, con sumas
 de verificacion y copia fuera del servidor.
 
-**Lo que no se hizo:** ejecutar el despliegue en una instancia EC2 nueva. Los
-scripts estan verificados sintacticamente y las imagenes se construyen en CI,
-pero el recorrido completo en una maquina limpia esta pendiente.
+**Lo que si se hizo el 23 de septiembre:** construir las dos imagenes desde
+un checkout limpio, arrancar la de la API contra PostgreSQL y consultar
+`/health`, arrancar la web y comprobar el fallback de la SPA, validar los dos
+compose, renderizar la plantilla de nginx con el script real de la imagen y
+pasarla por `nginx -t`. Esa verificacion encontro cuatro bloqueantes (la
+imagen no arrancaba por `zod`, faltaba `.dockerignore`, el respaldo corria con
+la base apagada y CI pasaba `JWT_SECRET` en vez de `JWT_ACCESS_SECRET`); estan
+corregidos y CI ahora arranca la imagen construida.
+
+**Lo que no se hizo:** ejecutar el despliegue en una instancia EC2 nueva de
+principio a fin.
 
 ---
 
@@ -193,7 +201,7 @@ pero el recorrido completo en una maquina limpia esta pendiente.
 |---|---|
 | Lint y typecheck en pre-commit | Cumple: husky + lint-staged |
 | Cobertura >= 80% en logica critica | Cumple: 98.6% en `@talento/shared`, 100% en el cifrado ([ADR-0010](DECISIONS.md#adr-0010)) |
-| e2e de API por modulo con permisos y aislamiento | Cumple: 98 pruebas en 6 suites |
+| e2e de API por modulo con permisos y aislamiento | Cumple: 106 pruebas en 7 suites |
 | Playwright: ingreso, vacaciones, postulacion, marcacion, encuesta, denuncia | Cumple: 41 pruebas, escritorio y movil |
 | Prueba de carga basica con k6 | Cumple: `infra/load/` |
 
@@ -201,8 +209,8 @@ pero el recorrido completo en una maquina limpia esta pendiente.
 
 | Nivel | Cantidad | Estado |
 |---|---|---|
-| Unitarias | 177 | pasan |
-| e2e de API | 98 | pasan |
+| Unitarias | 182 | pasan |
+| e2e de API | 106 | pasan |
 | Navegador | 41 | pasan |
 
 ## Internacionalizacion: la interfaz esta en espanol, el i18n no la cubre entera
@@ -227,10 +235,29 @@ resto sigue en espanol. Para una empresa colombiana eso no estorba; para vender
 la plataforma fuera, extraer los textos de las ~70 paginas restantes es trabajo
 pendiente y conocido, no un descuido.
 
+## Cobertura de la seccion 5 de la especificacion
+
+Una auditoria funcionalidad por funcionalidad (121 lineas de la seccion 5)
+dio: 42 implementadas, 70 parciales, 6 ausentes y 3 declaradas fuera de
+alcance por la propia especificacion (SCORM, chat interno, conectores de
+correo y WhatsApp). El patron de los parciales es el mismo casi siempre: el
+modelo y la API existen, la pantalla no. Tras esta revision quedaron
+implementados el planificador, las API keys, los reintentos de webhooks, el
+tiempo real en el cliente, la importacion desde Excel, el envio de ofertas y
+correos por etapa, el pre-ingreso con carga de documentos y el escalamiento de
+tareas y aprobaciones. `PLAN.md` lista lo que sigue abierto por modulo.
+
 ## Lo que queda abierto
 
 1. **Informe 360 en PDF** generado en el servidor (criterio 7).
 2. **Puntuacion de Lighthouse** medida, no solo los requisitos (criterio 9).
-3. **Despliegue verificado en una EC2 limpia** (criterio 10).
+3. **Despliegue ejecutado en una EC2 limpia** de principio a fin (criterio 10).
 4. **Prueba e2e del ciclo 360**, que hoy no tiene cobertura automatizada.
 5. **Extraccion de textos a i18n** en las paginas que aun no lo usan.
+6. **Pantallas para funciones que ya tienen API** (ver `PLAN.md`): entrevistas
+   y ofertas, turnos y justificaciones, tipos de ausencia, procesos
+   disciplinarios, flujos de aprobacion y plantillas de notificacion, 1:1,
+   PDI, carrera y sucesion, eventos, tablero del jefe, preferencias de
+   notificacion, ficha 360 completa.
+7. **Push PWA, SSO OIDC, H5P/xAPI, HLS** y la programacion de reportes desde
+   la interfaz: sin implementar.

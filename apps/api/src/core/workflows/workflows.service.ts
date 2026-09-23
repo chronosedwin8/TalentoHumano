@@ -511,4 +511,84 @@ export class WorkflowsService {
   private async emitResolved(event: WorkflowResolvedEvent): Promise<void> {
     await this.events.emitAsync(WORKFLOW_RESOLVED, event);
   }
+
+  /**
+   * Steps whose SLA expired. The first time the approver is reminded; the
+   * next time the step moves to the escalation user configured on the
+   * definition (when there is one). Called hourly by the scheduler.
+   */
+  async escalateOverdueSteps(): Promise<number> {
+    const now = new Date();
+    const steps = await this.prisma.workflowStepInstance.findMany({
+      where: { status: 'pending', dueAt: { lt: now }, instance: { status: 'pending' } },
+      include: {
+        step: { select: { escalateToUserId: true } },
+        instance: {
+          select: { id: true, companyId: true, title: true, currentStep: true, context: true },
+        },
+      },
+      take: 500,
+    });
+    let handled = 0;
+    for (const step of steps) {
+      if (step.position !== step.instance.currentStep) continue;
+      const url =
+        ((step.instance.context as Record<string, unknown> | null)?.url as string | undefined) ??
+        '/approvals';
+      const notify = (userId: string, title: string, body: string) =>
+        this.notifications.notify({
+          companyId: step.instance.companyId,
+          userIds: [userId],
+          eventKey: DOMAIN_EVENTS.WORKFLOW_STEP_PENDING,
+          title,
+          body,
+          url,
+          entityType: 'workflow_instance',
+          entityId: step.instance.id,
+          force: true,
+        });
+
+      if (!step.remindedAt) {
+        if (step.approverUserId) {
+          await notify(
+            step.approverUserId,
+            `Recordatorio: ${step.instance.title}`,
+            'La aprobacion supero el plazo acordado y sigue pendiente.',
+          );
+        }
+        await this.prisma.workflowStepInstance.update({
+          where: { id: step.id },
+          data: { remindedAt: now },
+        });
+        handled += 1;
+        continue;
+      }
+
+      const target = step.step?.escalateToUserId ?? null;
+      if (target && target !== step.approverUserId) {
+        await this.prisma.workflowStepInstance.update({
+          where: { id: step.id },
+          data: {
+            approverUserId: target,
+            delegatedToId: target,
+            dueAt: null,
+            comment: 'Escalado automaticamente por vencimiento del plazo',
+          },
+        });
+        await notify(
+          target,
+          `Aprobacion escalada: ${step.instance.title}`,
+          'El aprobador original no respondio dentro del plazo.',
+        );
+        handled += 1;
+      } else {
+        // Nobody to escalate to: stop re-processing the step every hour.
+        await this.prisma.workflowStepInstance.update({
+          where: { id: step.id },
+          data: { dueAt: null },
+        });
+      }
+    }
+    return handled;
+  }
 }

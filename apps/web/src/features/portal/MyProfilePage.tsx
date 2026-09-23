@@ -222,7 +222,12 @@ export function MyProfilePage() {
               </label>
 
               <div className="sm:col-span-2">
-                <Button loading={save.isPending} onClick={() => save.mutate(form)}>
+                <Button
+                  loading={save.isPending}
+                  onClick={() =>
+                    save.mutate({ ...form, personalEmail: form.personalEmail || null })
+                  }
+                >
                   <Save className="h-4 w-4" />
                   Guardar cambios
                 </Button>

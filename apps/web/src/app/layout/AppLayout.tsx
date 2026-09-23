@@ -32,8 +32,9 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import { connectRealtime } from '@/lib/realtime';
 import { useAuth } from '@/lib/auth';
 import { useI18n, useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -46,6 +47,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/overlays';
+import { toast } from '@/components/ui/overlays';
 import { NotificationsPanel } from './NotificationsPanel';
 
 function useTheme() {
@@ -107,8 +109,26 @@ export function AppLayout() {
 
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const [notificationsOpen, setNotificationsOpen] = React.useState(false);
+  const queryClient = useQueryClient();
 
   React.useEffect(() => setSidebarOpen(false), [location.pathname]);
+
+  // Live channel: new notifications show up without polling, and help desk
+  // conversations refresh when the other side writes.
+  const userId = user?.id;
+  React.useEffect(() => {
+    if (!userId) return undefined;
+    return connectRealtime((event, payload) => {
+      if (event === 'notification') {
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        void queryClient.invalidateQueries({ queryKey: ['approvals'] });
+        const data = payload as { title?: string; body?: string } | null;
+        if (data?.title) toast.info(data.title, data.body ?? undefined);
+      } else if (event.startsWith('ticket.')) {
+        void queryClient.invalidateQueries({ queryKey: ['helpdesk'] });
+      }
+    });
+  }, [userId, queryClient]);
 
   const { data: unread } = useQuery({
     queryKey: ['notifications', 'unread'],

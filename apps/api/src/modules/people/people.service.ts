@@ -35,6 +35,10 @@ export interface EmployeeListParams {
   locationId?: string;
   positionId?: string;
   managerId?: string;
+  /** Explicit ids (pickers resolving a preselected value). */
+  ids?: string[];
+  /** 'team' narrows the list to the caller's reporting line. */
+  scope?: 'all' | 'team';
   sort?: string;
 }
 
@@ -55,11 +59,17 @@ export class PeopleService {
 
   async list(ctx: RequestContext, params: EmployeeListParams) {
     const employeeScope = await this.scope.employeeScope(ctx, 'people.employee.read');
+    const teamIds = params.scope === 'team' ? await this.scope.teamEmployeeIds(ctx) : null;
+    const idFilters = [
+      employeeScope.kind === 'ids' ? employeeScope.ids : null,
+      teamIds,
+      params.ids?.length ? params.ids : null,
+    ].filter((ids): ids is string[] => ids !== null);
 
     const where: Prisma.EmployeeWhereInput = {
       companyId: ctx.companyId,
       deletedAt: null,
-      ...(employeeScope.kind === 'ids' ? { id: { in: employeeScope.ids } } : {}),
+      ...(idFilters.length ? { AND: idFilters.map((ids) => ({ id: { in: ids } })) } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.departmentId ? { departmentId: params.departmentId } : {}),
       ...(params.locationId ? { locationId: params.locationId } : {}),
@@ -111,6 +121,48 @@ export class PeopleService {
     ]);
 
     return { rows, total };
+  }
+
+  /**
+   * Rows for the XLSX export: the list decides which employees are visible
+   * (scope and filters); this only widens the columns. Sensitive, encrypted
+   * fields are deliberately not selected.
+   */
+  async exportRows(
+    ctx: RequestContext,
+    params: Omit<EmployeeListParams, 'page' | 'limit'>,
+    limit: number,
+  ) {
+    const { rows } = await this.list(ctx, { ...params, page: 1, limit });
+    return this.prisma.employee.findMany({
+      where: { id: { in: rows.map((row) => row.id) } },
+      select: {
+        employeeCode: true,
+        firstName: true,
+        lastName: true,
+        secondLastName: true,
+        email: true,
+        personalEmail: true,
+        phone: true,
+        mobile: true,
+        documentType: true,
+        documentNumber: true,
+        birthDate: true,
+        gender: true,
+        nationality: true,
+        city: true,
+        status: true,
+        hiredAt: true,
+        terminatedAt: true,
+        workModality: true,
+        position: { select: { name: true } },
+        department: { select: { name: true } },
+        location: { select: { name: true } },
+        costCenter: { select: { name: true } },
+        manager: { select: { fullName: true, email: true } },
+      },
+      orderBy: { fullName: 'asc' },
+    });
   }
 
   /* ------------------------------- detail ------------------------------- */

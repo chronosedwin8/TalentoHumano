@@ -133,6 +133,41 @@ export class UsersController {
     return this.users.forcePasswordChange(ctx, userId);
   }
 
+  /* ------------------------------ sessions ------------------------------ */
+
+  @Get(':userId/sessions')
+  @RequirePermission('settings.user.read')
+  @ApiOperation({ summary: 'Sesiones abiertas de un usuario' })
+  async sessions(
+    @Ctx() ctx: RequestContext,
+    @Param('userId', new ZodValidationPipe(uuid)) userId: string,
+  ) {
+    return this.users.listSessions(ctx, userId);
+  }
+
+  @Delete(':userId/sessions')
+  @RequirePermission('settings.user.update')
+  @Audit({ entityType: 'session', idParam: 'userId', summary: 'Cierre de todas las sesiones' })
+  @ApiOperation({ summary: 'Cierra todas las sesiones de un usuario' })
+  async revokeAllSessions(
+    @Ctx() ctx: RequestContext,
+    @Param('userId', new ZodValidationPipe(uuid)) userId: string,
+  ) {
+    return this.users.revokeAllSessions(ctx, userId);
+  }
+
+  @Delete(':userId/sessions/:sessionId')
+  @RequirePermission('settings.user.update')
+  @Audit({ entityType: 'session', idParam: 'sessionId', summary: 'Cierre de sesion remota' })
+  @ApiOperation({ summary: 'Cierra una sesion de un usuario' })
+  async revokeSession(
+    @Ctx() ctx: RequestContext,
+    @Param('userId', new ZodValidationPipe(uuid)) userId: string,
+    @Param('sessionId', new ZodValidationPipe(uuid)) sessionId: string,
+  ) {
+    return this.users.revokeSession(ctx, userId, sessionId);
+  }
+
   /* -------------------------------- roles ------------------------------- */
 
   @Get('roles/all')

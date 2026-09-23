@@ -1,5 +1,7 @@
 # Development stack: database, cache and mail catcher.
 # The API and the web app run on the host with `pnpm dev`.
+name: talento-dev
+
 services:
   postgres:
     image: postgres:17-alpine

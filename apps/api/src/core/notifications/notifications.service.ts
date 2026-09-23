@@ -3,7 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import type { NotificationChannel } from '@prisma/client';
 import { renderTemplate } from '@talento/shared';
 import Handlebars from 'handlebars';
+import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import type { RequestContext } from '../../common/types/request-context';
 import { QUEUES, QueueService } from '../queue/queue.service';
 import { MailService } from './mail.service';
 import { NotificationsGateway } from './notifications.gateway';
@@ -26,6 +28,18 @@ export interface NotifyInput {
 }
 
 const DEFAULT_CHANNELS: NotificationChannel[] = ['in_app', 'email'];
+
+export interface TemplateInput {
+  eventKey: string;
+  channel: NotificationChannel;
+  locale?: string;
+  subject?: string | null;
+  body: string;
+  isActive?: boolean;
+}
+
+/** Variables every email template can use, on top of the event `data`. */
+export const TEMPLATE_VARIABLES = ['title', 'body', 'firstName', 'companyName', 'url'] as const;
 
 @Injectable()
 export class NotificationsService {
@@ -216,5 +230,82 @@ export class NotificationsService {
       data: { readAt: new Date() },
     });
     return result.count;
+  }
+
+  /* ------------------------------ templates ------------------------------ */
+
+  /**
+   * Global defaults (companyId null) plus the company's own overrides. The
+   * UI groups them by event and channel and shows the override when present.
+   */
+  async listTemplates(companyId: string) {
+    return this.prisma.notificationTemplate.findMany({
+      where: { deletedAt: null, OR: [{ companyId }, { companyId: null }] },
+      orderBy: [{ eventKey: 'asc' }, { channel: 'asc' }, { locale: 'asc' }, { companyId: 'desc' }],
+    });
+  }
+
+  /** Creates or replaces the company override for an event, channel and locale. */
+  async upsertTemplate(ctx: RequestContext, input: TemplateInput) {
+    const locale = input.locale ?? 'es';
+    const existing = await this.prisma.notificationTemplate.findFirst({
+      where: { companyId: ctx.companyId, eventKey: input.eventKey, channel: input.channel, locale },
+    });
+    const data = {
+      subject: input.subject ?? null,
+      body: input.body,
+      isActive: input.isActive ?? true,
+    };
+    if (existing) {
+      return this.prisma.notificationTemplate.update({
+        where: { id: existing.id },
+        data: { ...data, deletedAt: null },
+      });
+    }
+    return this.prisma.notificationTemplate.create({
+      data: {
+        companyId: ctx.companyId,
+        eventKey: input.eventKey,
+        channel: input.channel,
+        locale,
+        ...data,
+      },
+    });
+  }
+
+  /**
+   * Edits a template. Global defaults are never modified: editing one creates
+   * the company override with the merged values, so the default stays intact
+   * for every other tenant.
+   */
+  async updateTemplate(
+    ctx: RequestContext,
+    id: string,
+    input: Partial<Pick<TemplateInput, 'subject' | 'body' | 'isActive'>>,
+  ) {
+    const template = await this.prisma.notificationTemplate.findFirst({
+      where: { id, deletedAt: null, OR: [{ companyId: ctx.companyId }, { companyId: null }] },
+    });
+    if (!template) throw BusinessException.notFound('Plantilla de notificacion');
+
+    if (template.companyId === ctx.companyId) {
+      return this.prisma.notificationTemplate.update({
+        where: { id: template.id },
+        data: {
+          ...(input.subject !== undefined ? { subject: input.subject } : {}),
+          ...(input.body !== undefined ? { body: input.body } : {}),
+          ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        },
+      });
+    }
+
+    return this.upsertTemplate(ctx, {
+      eventKey: template.eventKey,
+      channel: template.channel,
+      locale: template.locale,
+      subject: input.subject !== undefined ? input.subject : template.subject,
+      body: input.body ?? template.body,
+      isActive: input.isActive ?? template.isActive,
+    });
   }
 }

@@ -23,10 +23,11 @@ interface AuditLog {
   entityId: string | null;
   summary: string | null;
   changes: unknown;
-  ipAddress: string | null;
+  ip: string | null;
   userAgent: string | null;
   createdAt: string;
-  actor: { id: string; firstName: string; lastName: string; email: string } | null;
+  actorId: string | null;
+  actorEmail: string | null;
 }
 
 interface SensitiveLog {
@@ -83,13 +84,8 @@ function AuditLogs() {
       key: 'actor',
       header: 'Usuario',
       render: (row) =>
-        row.actor ? (
-          <div className="min-w-0">
-            <p className="truncate">
-              {row.actor.firstName} {row.actor.lastName}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">{row.actor.email}</p>
-          </div>
+        row.actorEmail ? (
+          <span className="truncate">{row.actorEmail}</span>
         ) : (
           <span className="text-muted-foreground">Sistema</span>
         ),
@@ -112,10 +108,10 @@ function AuditLogs() {
       render: (row) => <span className="truncate">{row.summary ?? '—'}</span>,
     },
     {
-      key: 'ipAddress',
+      key: 'ip',
       header: 'IP',
       hideOnMobile: true,
-      render: (row) => <span className="font-mono text-xs">{row.ipAddress ?? '—'}</span>,
+      render: (row) => <span className="font-mono text-xs">{row.ip ?? '—'}</span>,
     },
   ];
 
@@ -195,7 +191,7 @@ function AuditLogs() {
                 <Row label="Accion" value={statusLabel(detail.action)} />
                 <Row label="Entidad" value={detail.entityType} />
                 <Row label="Id" value={detail.entityId ?? '—'} />
-                <Row label="IP" value={detail.ipAddress ?? '—'} />
+                <Row label="IP" value={detail.ip ?? '—'} />
                 <Row label="Navegador" value={detail.userAgent ?? '—'} />
               </div>
               {detail.changes ? (

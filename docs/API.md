@@ -146,7 +146,7 @@ leen ni escriben identidad, a proposito.
 
 | Mecanismo | Como |
 |---|---|
-| API key | Cabecera `X-Api-Key`. La clave se muestra una sola vez al crearla |
+| API key | Cabecera `X-Api-Key`. La clave se muestra una sola vez al crearla y solo concede los permisos elegidos, siempre a alcance de empresa; no abre sesion ni tiene colaborador asociado |
 | Webhook | `POST` con firma `X-Talento-Signature` (HMAC-SHA256 del cuerpo) |
 
 Verificacion de la firma:
@@ -156,4 +156,6 @@ const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex
 const valid = crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 ```
 
-Los eventos disponibles estan en `GET /integrations/events`.
+Los eventos disponibles estan en `GET /integrations/events`. Una entrega
+fallida se reintenta hasta cinco veces con retroceso exponencial (30 s, 1, 2 y
+4 min) y queda como `failed` si ninguna responde 2xx.

@@ -434,7 +434,11 @@ function AssignDialog({
   const { data: employees } = useQuery({
     queryKey: ['people', 'picker', search],
     queryFn: () =>
-      apiList<{ id: string; fullName: string; position: string | null }>('/people/employees', {
+      apiList<{
+        id: string;
+        fullName: string;
+        position: { id: string; name: string } | null;
+      }>('/people/employees', {
         search,
         limit: 15,
         status: 'active',
@@ -476,7 +480,7 @@ function AssignDialog({
               <span className="min-w-0 flex-1 truncate">
                 {employee.fullName}
                 <span className="ml-2 text-xs text-muted-foreground">
-                  {employee.position ?? ''}
+                  {employee.position?.name ?? ''}
                 </span>
               </span>
             </button>

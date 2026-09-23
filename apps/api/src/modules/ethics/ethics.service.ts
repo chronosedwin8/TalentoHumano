@@ -5,6 +5,9 @@ import { EncryptionService } from '../../common/crypto/encryption.service';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
+import { NotificationsService } from '../../core/notifications/notifications.service';
+import { EthicsStatus } from '@prisma/client';
+import { enumQuery } from '../../common/utils/crud';
 
 /**
  * Ethics hotline.
@@ -22,7 +25,52 @@ export class EthicsService {
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
     private readonly events: EventEmitter2,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * Reports still open past their legal response deadline. The officers of
+   * each company get one digest per run; the scheduler runs it once a day.
+   * Nothing about the reporter is included: only counts and tracking codes.
+   */
+  async escalateOverdueReports(): Promise<number> {
+    const overdue = await this.prisma.ethicsReport.findMany({
+      where: {
+        status: { in: ['received', 'triaged', 'in_investigation'] },
+        dueAt: { lt: new Date() },
+      },
+      select: { id: true, companyId: true, trackingCode: true, dueAt: true },
+      take: 1000,
+    });
+    if (!overdue.length) return 0;
+    const byCompany = new Map<string, typeof overdue>();
+    for (const report of overdue) {
+      byCompany.set(report.companyId, [...(byCompany.get(report.companyId) ?? []), report]);
+    }
+    for (const [companyId, reports] of byCompany) {
+      const officers = await this.prisma.companyUser.findMany({
+        where: {
+          companyId,
+          deletedAt: null,
+          roles: { some: { role: { key: { in: ['ethics_officer', 'company_admin'] } } } },
+        },
+        select: { userId: true },
+      });
+      if (!officers.length) continue;
+      const codes = reports.map((report) => report.trackingCode).join(', ');
+      await this.notifications.notify({
+        companyId,
+        userIds: officers.map((officer) => officer.userId),
+        eventKey: 'ethics.report.overdue',
+        title: `${reports.length} denuncia(s) fuera del plazo de respuesta`,
+        body: `Codigos: ${codes}. La ley exige responder dentro del plazo definido por categoria.`,
+        url: '/ethics',
+        entityType: 'ethics_report',
+        force: true,
+      });
+    }
+    return overdue.length;
+  }
 
   async submitReport(companySlug: string, input: Record<string, any>) {
     const company = await this.prisma.company.findFirst({
@@ -174,7 +222,7 @@ export class EthicsService {
   async listReports(ctx: RequestContext, params: { page: number; limit: number; status?: string }) {
     const where = {
       companyId: ctx.companyId,
-      ...(params.status ? { status: params.status as never } : {}),
+      ...(params.status ? { status: enumQuery(params.status, EthicsStatus, 'status') } : {}),
       OR: [{ ethicsCase: null }, { ethicsCase: { NOT: { excludedUserIds: { has: ctx.userId } } } }],
     };
 

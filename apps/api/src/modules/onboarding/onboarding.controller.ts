@@ -9,6 +9,23 @@ import type { RequestContext } from '../../common/types/request-context';
 import { defined, listPaged, softDelete } from '../../common/utils/crud';
 import { OnboardingService } from './onboarding.service';
 
+const preboardingProfileSchema = z.object({
+  phone: z.string().max(40).nullable().optional(),
+  mobile: z.string().max(40).nullable().optional(),
+  personalEmail: z.string().email().max(180).nullable().optional().or(z.literal('')),
+  address: z.string().max(240).nullable().optional(),
+  city: z.string().max(120).nullable().optional(),
+  emergencyContact: z
+    .object({
+      name: z.string().trim().min(2).max(160),
+      relationship: z.string().trim().min(2).max(80),
+      phone: z.string().trim().min(6).max(40),
+      altPhone: z.string().max(40).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+});
+
 const templateTaskSchema = z.object({
   title: z.string().trim().min(2).max(260),
   description: z.string().max(2000).nullable().optional(),
@@ -147,7 +164,7 @@ export class OnboardingController {
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).onboardingTemplate, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).onboardingTemplate, id);
   }
 
   /* ------------------------------ processes ----------------------------- */
@@ -336,10 +353,46 @@ export class OnboardingController {
     return this.onboarding.preboarding(token);
   }
 
+  @Public()
+  @Patch('preboarding/:token/profile')
+  @ApiOperation({
+    summary: 'El nuevo colaborador completa sus datos de contacto antes del ingreso',
+  })
+  async preboardingProfile(
+    @Param('token') token: string,
+    @Body(new ZodValidationPipe(preboardingProfileSchema))
+    dto: z.infer<typeof preboardingProfileSchema>,
+  ) {
+    return this.onboarding.preboardingUpdateProfile(token, dto);
+  }
+
+  @Public()
+  @Post('preboarding/:token/tasks/:taskId/complete')
+  @ApiOperation({
+    summary: 'El nuevo colaborador completa una tarea propia (con adjunto opcional)',
+  })
+  async preboardingTask(
+    @Param('token') token: string,
+    @Param('taskId', new ZodValidationPipe(uuid)) taskId: string,
+    @Body(
+      new ZodValidationPipe(
+        z.object({
+          fileId: uuid.nullable().optional(),
+          note: z.string().max(1000).nullable().optional(),
+        }),
+      ),
+    )
+    dto: { fileId?: string | null; note?: string | null },
+  ) {
+    return this.onboarding.preboardingCompleteTask(token, taskId, dto);
+  }
+
   @Post('reminders/run')
   @RequirePermission('onboarding.process.update')
-  @ApiOperation({ summary: 'Envia recordatorios de tareas vencidas o por vencer' })
+  @ApiOperation({ summary: 'Envia recordatorios de tareas por vencer y escala las vencidas' })
   async runReminders(@Ctx() ctx: RequestContext) {
-    return { sent: await this.onboarding.sendReminders(ctx.companyId) };
+    const sent = await this.onboarding.sendReminders(ctx.companyId);
+    const escalated = await this.onboarding.escalateOverdue(ctx.companyId);
+    return { sent, escalated };
   }
 }

@@ -129,7 +129,7 @@ export class LeavesController {
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).leaveType, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).leaveType, id);
   }
 
   /* ------------------------------ policies ------------------------------ */
@@ -222,12 +222,15 @@ export class LeavesController {
       take: 500,
     });
     const targetYear = year ? Number(year) : new Date().getUTCFullYear();
-    return Promise.all(
-      employees.map(async (employee) => ({
-        employee,
-        balance: await this.leaves.balanceFor(ctx.companyId, employee.id, targetYear),
-      })),
+    const balances = await this.leaves.balancesFor(
+      ctx.companyId,
+      employees.map((employee) => employee.id),
+      targetYear,
     );
+    return employees.map((employee) => ({
+      employee,
+      balance: balances.get(employee.id) ?? null,
+    }));
   }
 
   /* ------------------------------ requests ------------------------------ */
@@ -429,7 +432,7 @@ export class LeavesController {
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).employeeEvent, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).employeeEvent, id);
   }
 
   /* --------------------------- disciplinary ----------------------------- */

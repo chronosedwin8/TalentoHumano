@@ -42,6 +42,8 @@ export const envSchema = z.object({
 
   REDIS_ENABLED: bool(false),
   REDIS_URL: z.string().default('redis://localhost:6379'),
+  /** Whether this process consumes the BullMQ queues (see main.ts / worker.ts). */
+  QUEUE_WORKERS: bool(true),
 
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_LOCAL_PATH: z.string().default('./storage'),
@@ -70,6 +72,8 @@ export const envSchema = z.object({
   SSO_MICROSOFT_TENANT: z.string().default('common'),
 
   LOG_LEVEL: z.string().default('info'),
+  /** OpenAPI UI is always on outside production; opt in there. */
+  SWAGGER_ENABLED: bool(false),
   SENTRY_DSN: z.string().optional().default(''),
   METRICS_ENABLED: bool(true),
 
@@ -80,6 +84,30 @@ export const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+const DEFAULT_COOKIE_SECRET = 'talento-cookie-secret';
+
+/**
+ * Values that are fine on a laptop but must never reach a server. The
+ * schema defaults keep local setup short; production has to be explicit.
+ */
+function productionIssues(env: Env): string[] {
+  if (env.NODE_ENV !== 'production') return [];
+  const issues: string[] = [];
+  if (env.COOKIE_SECRET === DEFAULT_COOKIE_SECRET) {
+    issues.push('COOKIE_SECRET: debe definirse en produccion');
+  }
+  if (/change-me/i.test(env.JWT_ACCESS_SECRET) || /change-me/i.test(env.JWT_REFRESH_SECRET)) {
+    issues.push('JWT_ACCESS_SECRET / JWT_REFRESH_SECRET: reemplace los valores de ejemplo');
+  }
+  if (/^0123456789abcdef/.test(env.ENCRYPTION_KEY)) {
+    issues.push('ENCRYPTION_KEY: reemplace la clave de ejemplo');
+  }
+  if (!env.COOKIE_SECURE) {
+    issues.push('COOKIE_SECURE: debe ser true en produccion (la sesion viaja por HTTPS)');
+  }
+  return issues;
+}
+
 export function validateEnv(config: Record<string, unknown>): Env {
   const parsed = envSchema.safeParse(config);
   if (!parsed.success) {
@@ -87,6 +115,12 @@ export function validateEnv(config: Record<string, unknown>): Env {
       .map((i) => `  - ${i.path.join('.')}: ${i.message}`)
       .join('\n');
     throw new Error(`Configuracion de entorno invalida:\n${details}`);
+  }
+  const issues = productionIssues(parsed.data);
+  if (issues.length) {
+    throw new Error(
+      `Configuracion insegura para produccion:\n${issues.map((i) => `  - ${i}`).join('\n')}`,
+    );
   }
   return parsed.data;
 }

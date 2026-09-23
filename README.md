@@ -18,7 +18,7 @@ servicio al colaborador, seguridad y salud en el trabajo, y analitica.
 | Web | React 18 · Vite 6 · Tailwind · TanStack Query · PWA |
 | Modelo de datos | 211 tablas, multiempresa desde el primer dia |
 | Permisos | 308 permisos `modulo.recurso.accion` · 11 roles · 4 alcances de datos |
-| Pruebas | 177 unitarias · 99 e2e de API · 41 flujos de navegador |
+| Pruebas | 182 unitarias · 106 e2e de API · 41 flujos de navegador |
 
 ## Puesta en marcha
 

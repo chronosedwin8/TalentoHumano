@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { clockEntrySchema, isoDate, MODULES, uuid, workScheduleSchema } from '@talento/shared';
 import { z } from 'zod';
@@ -8,9 +9,10 @@ import { EncryptionService } from '../../common/crypto/encryption.service';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { listPaged } from '../../common/utils/crud';
+import { enumQuery, listPaged } from '../../common/utils/crud';
 import { paged, parsePage } from '../../common/utils/pagination';
 import { TimeService } from './time.service';
+import { JustificationStatus } from '@prisma/client';
 
 const shiftSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -154,6 +156,77 @@ export class TimeController {
     return paged(rows, total, page, limit);
   }
 
+  @Get('attendance/export')
+  @RequirePermission('time.attendance.read')
+  @Audit({ entityType: 'attendance_day', action: 'export', summary: 'Exportacion de asistencia' })
+  @ApiOperation({ summary: 'Exporta la asistencia del periodo a CSV' })
+  async attendanceExport(
+    @Ctx() ctx: RequestContext,
+    @Query()
+    query: {
+      from: string;
+      to: string;
+      employeeId?: string;
+      departmentId?: string;
+      status?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const rows = await this.time.attendanceExport(ctx, {
+      from: query.from,
+      to: query.to,
+      employeeId: query.employeeId,
+      departmentId: query.departmentId,
+      status: query.status,
+    });
+    const time = (value: Date | null) => (value ? value.toISOString().slice(11, 16) : '');
+    const header = [
+      'Fecha',
+      'Codigo',
+      'Colaborador',
+      'Area',
+      'Estado',
+      'Entrada',
+      'Salida',
+      'Minutos trabajados',
+      'Minutos de retardo',
+      'Salida anticipada (min)',
+      'Extras (min, informativo)',
+      'Remoto',
+    ];
+    const lines = rows.map((row) =>
+      [
+        row.date.toISOString().slice(0, 10),
+        row.employee.employeeCode,
+        row.employee.fullName,
+        row.employee.department?.name ?? '',
+        row.status,
+        time(row.firstIn),
+        time(row.lastOut),
+        row.workedMinutes,
+        row.lateMinutes,
+        row.earlyLeaveMinutes,
+        row.overtimeMinutes,
+        row.isRemote ? 'si' : 'no',
+      ]
+        .map((cell) => String(cell ?? '').replace(/;/g, ','))
+        .join(';'),
+    );
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="asistencia-${query.from}-${query.to}.csv"`,
+    );
+    res.send(`\uFEFF${[header.join(';'), ...lines].join('\n')}`);
+  }
+
+  @Get('attendance/remote-summary')
+  @RequirePermission('time.report.read')
+  @ApiOperation({ summary: 'Dias en teletrabajo por colaborador en el periodo' })
+  async remoteSummary(@Ctx() ctx: RequestContext, @Query() query: { from: string; to: string }) {
+    return this.time.remoteSummary(ctx, query.from, query.to);
+  }
+
   @Get('attendance/summary')
   @RequirePermission('time.report.read')
   @ApiOperation({ summary: 'Indicadores de puntualidad y ausentismo' })
@@ -244,7 +317,7 @@ export class TimeController {
     @Query() query: { page?: string; limit?: string; status?: string },
   ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).attendanceJustification, query, {
-      where: { status: (query.status as never) ?? 'pending' },
+      where: { status: enumQuery(query.status, JustificationStatus, 'status') ?? 'pending' },
       include: {
         attendanceDay: { include: { employee: { select: { id: true, fullName: true } } } },
       },
@@ -395,6 +468,27 @@ export class TimeController {
       },
       orderBy: [{ date: 'asc' }],
     });
+  }
+
+  @Post('shifts/publish')
+  @RequirePermission('time.shift.update')
+  @Audit({ entityType: 'shift_assignment', summary: 'Publicacion de turnos' })
+  @ApiOperation({ summary: 'Publica los turnos del periodo y avisa a los colaboradores' })
+  async publishShifts(
+    @Ctx() ctx: RequestContext,
+    @Body(
+      new ZodValidationPipe(
+        z.object({
+          from: isoDate,
+          to: isoDate,
+          departmentId: uuid.optional(),
+          employeeIds: z.array(uuid).max(500).optional(),
+        }),
+      ),
+    )
+    dto: { from: string; to: string; departmentId?: string; employeeIds?: string[] },
+  ) {
+    return this.time.publishAssignments(ctx, dto);
   }
 
   @Post('shifts/assign')

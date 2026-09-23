@@ -119,7 +119,7 @@ export class DocumentsController {
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).documentTemplate, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).documentTemplate, id);
   }
 
   /* -------------------------- generated documents ----------------------- */
@@ -386,11 +386,22 @@ export class DocumentsController {
     @Param('id', new ZodValidationPipe(uuid)) id: string,
     @Query() query: { page?: string; limit?: string },
   ) {
-    return listPaged(this.prisma.forCompany(ctx.companyId).policyAcknowledgement, query, {
+    const db = this.prisma.forCompany(ctx.companyId);
+    // The acknowledgement keeps the employee id without a relation, so the
+    // names are joined in a second query.
+    const page = await listPaged<{ employeeId: string }>(db.policyAcknowledgement, query, {
       where: { policyId: id },
-      include: { employee: { select: { id: true, fullName: true, employeeCode: true } } },
       defaultSort: { createdAt: 'desc' },
     });
+    const employees = await db.employee.findMany({
+      where: { id: { in: page.data.map((row) => row.employeeId) } },
+      select: { id: true, fullName: true, employeeCode: true },
+    });
+    const byId = new Map(employees.map((employee) => [employee.id, employee]));
+    return {
+      ...page,
+      data: page.data.map((row) => ({ ...row, employee: byId.get(row.employeeId) ?? null })),
+    };
   }
 
   /* ------------------------------ signatures ---------------------------- */

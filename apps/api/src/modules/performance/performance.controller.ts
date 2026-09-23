@@ -229,7 +229,7 @@ export class PerformanceController {
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).objective, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).objective, id);
   }
 
   @Post('checkins')

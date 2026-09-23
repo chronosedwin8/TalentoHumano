@@ -83,6 +83,39 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return { ...base, ...this.fromPrisma(exception) };
     }
 
+    // Exclusion constraints (no overlapping leaves) surface as unknown
+    // request errors, without a P-code.
+    if (exception instanceof Prisma.PrismaClientUnknownRequestError) {
+      if (exception.message.includes('leave_requests_no_overlap')) {
+        return {
+          ...base,
+          statusCode: HttpStatus.CONFLICT,
+          code: ERROR_CODES.LEAVE_OVERLAP,
+          message: 'La ausencia se cruza con otra ya aprobada del mismo colaborador',
+        };
+      }
+      if (/exclusion constraint|23P01/.test(exception.message)) {
+        return {
+          ...base,
+          statusCode: HttpStatus.CONFLICT,
+          code: ERROR_CODES.CONFLICT,
+          message: 'El registro se cruza con otro existente',
+        };
+      }
+    }
+
+    if (
+      exception instanceof Prisma.PrismaClientInitializationError ||
+      exception instanceof Prisma.PrismaClientRustPanicError
+    ) {
+      return {
+        ...base,
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        code: 'DATABASE_UNAVAILABLE',
+        message: 'La base de datos no esta disponible. Intente nuevamente en unos segundos.',
+      };
+    }
+
     if (exception instanceof Prisma.PrismaClientValidationError) {
       return {
         ...base,

@@ -46,7 +46,7 @@ interface Alert {
   kind: string;
   severity: string;
   title: string;
-  description: string | null;
+  detail: string | null;
   dueDate: string | null;
   createdAt: string;
 }
@@ -56,7 +56,7 @@ interface TurnoverRisk {
   fullName: string;
   department: string | null;
   score: number;
-  factors: string[];
+  reasons: string[];
 }
 
 export function AnalyticsPage() {
@@ -330,8 +330,8 @@ export function AnalyticsPage() {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{alert.title}</p>
-                      {alert.description ? (
-                        <p className="text-sm text-muted-foreground">{alert.description}</p>
+                      {alert.detail ? (
+                        <p className="text-sm text-muted-foreground">{alert.detail}</p>
                       ) : null}
                     </div>
                     <Badge tone={statusTone(alert.severity)}>{statusLabel(alert.severity)}</Badge>
@@ -381,7 +381,7 @@ export function AnalyticsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{risk.fullName}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {risk.department ?? 'Sin area'} · {risk.factors.join(', ')}
+                        {risk.department ?? 'Sin area'} · {risk.reasons.join(', ')}
                       </p>
                     </div>
                     <Badge

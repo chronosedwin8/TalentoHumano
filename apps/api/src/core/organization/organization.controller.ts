@@ -311,7 +311,7 @@ export class OrganizationController {
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).costCenter, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).costCenter, id);
   }
 
   /* --------------------------- chart and people -------------------------- */

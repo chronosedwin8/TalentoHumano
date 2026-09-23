@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   employeeCreateSchema,
@@ -21,12 +22,14 @@ import {
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged, softDelete } from '../../common/utils/crud';
+import { defined, enumQuery, listPaged, softDelete } from '../../common/utils/crud';
 import { paged, parsePage } from '../../common/utils/pagination';
 import { ScopeService } from '../../core/access/scope.service';
 import { FilesService } from '../../core/files/files.service';
 import { WorkflowsService } from '../../core/workflows/workflows.service';
+import { EmployeeImportService, XLSX_MIME } from './employee-import.service';
 import { PeopleService } from './people.service';
+import { ChangeRequestStatus, EmployeeStatus } from '@prisma/client';
 
 const personalDataSchema = z.object({
   maritalStatus: z.string().max(40).nullable().optional(),
@@ -97,10 +100,16 @@ const terminateSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 
-const importSchema = z.object({
-  rows: z.array(z.record(z.unknown())).min(1).max(2000),
-  dryRun: z.boolean().default(true),
-});
+const importSchema = z
+  .object({
+    rows: z.array(z.record(z.unknown())).max(2000).optional(),
+    /** An XLSX uploaded through the presign flow. */
+    fileId: uuid.optional(),
+    dryRun: z.boolean().default(true),
+  })
+  .refine((value) => Boolean(value.fileId) || (value.rows?.length ?? 0) > 0, {
+    message: 'Envie filas o el archivo a importar',
+  });
 
 @ApiTags('personas')
 @Controller({ path: 'people', version: '1' })
@@ -108,6 +117,7 @@ const importSchema = z.object({
 export class PeopleController {
   constructor(
     private readonly people: PeopleService,
+    private readonly employeeImport: EmployeeImportService,
     private readonly prisma: PrismaService,
     private readonly files: FilesService,
     private readonly scope: ScopeService,
@@ -132,19 +142,27 @@ export class PeopleController {
       locationId?: string;
       positionId?: string;
       managerId?: string;
+      ids?: string;
+      scope?: string;
       sort?: string;
     },
   ) {
     const { page, limit } = parsePage(query);
+    const ids = query.ids
+      ?.split(',')
+      .map((id) => id.trim())
+      .filter((id) => uuid.safeParse(id).success);
     const { rows, total } = await this.people.list(ctx, {
       page,
       limit,
       search: query.search,
-      status: query.status as never,
+      status: enumQuery(query.status, EmployeeStatus, 'status'),
       departmentId: query.departmentId,
       locationId: query.locationId,
       positionId: query.positionId,
       managerId: query.managerId,
+      ids,
+      scope: query.scope === 'team' ? 'team' : 'all',
       sort: query.sort,
     });
     return paged(rows, total, page, limit);
@@ -155,6 +173,36 @@ export class PeopleController {
   @ApiOperation({ summary: 'Resumen de headcount por area, sede y estado' })
   async headcount(@Ctx() ctx: RequestContext) {
     return this.people.headcountSummary(ctx);
+  }
+
+  @Get('employees/export')
+  @RequirePermission('people.employee.export')
+  @Audit({ entityType: 'employee', action: 'export', summary: 'Exportacion de colaboradores' })
+  @ApiOperation({ summary: 'Exporta el listado filtrado a XLSX (sin datos sensibles)' })
+  async exportEmployees(
+    @Ctx() ctx: RequestContext,
+    @Query()
+    query: {
+      search?: string;
+      status?: string;
+      departmentId?: string;
+      locationId?: string;
+      positionId?: string;
+      managerId?: string;
+    },
+    @Res() res: Response,
+  ) {
+    const { buffer } = await this.employeeImport.buildExport(ctx, {
+      search: query.search,
+      status: enumQuery(query.status, EmployeeStatus, 'status'),
+      departmentId: query.departmentId,
+      locationId: query.locationId,
+      positionId: query.positionId,
+      managerId: query.managerId,
+    });
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Disposition', 'attachment; filename="colaboradores.xlsx"');
+    res.send(buffer);
   }
 
   @Get('employees/:id')
@@ -400,13 +448,13 @@ export class PeopleController {
       include: { documentType: true },
       orderBy: { createdAt: 'desc' },
     });
+    const fileIds = rows.map((row) => row.fileId).filter((id): id is string => Boolean(id));
+    const files = await this.files.findManyById(ctx.companyId, fileIds);
     return Promise.all(
-      rows.map(async (row) => ({
-        ...row,
-        file: row.fileId
-          ? await this.files.present(await this.files.findById(ctx.companyId, row.fileId))
-          : null,
-      })),
+      rows.map(async (row) => {
+        const file = row.fileId ? files.get(row.fileId) : undefined;
+        return { ...row, file: file ? await this.files.present(file) : null };
+      }),
     );
   }
 
@@ -455,7 +503,7 @@ export class PeopleController {
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
   ) {
-    return softDelete(this.prisma.forCompany(ctx.companyId).employeeDocument, id, ctx.userId);
+    return softDelete(this.prisma.forCompany(ctx.companyId).employeeDocument, id);
   }
 
   @Get('documents/expiring')
@@ -628,7 +676,7 @@ export class PeopleController {
     @Query() query: { page?: string; limit?: string; status?: string },
   ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).employeeChangeRequest, query, {
-      where: { status: (query.status as never) ?? 'pending' },
+      where: { status: enumQuery(query.status, ChangeRequestStatus, 'status') ?? 'pending' },
       include: { employee: { select: { id: true, fullName: true, employeeCode: true } } },
       defaultSort: { createdAt: 'desc' },
     });
@@ -759,67 +807,35 @@ export class PeopleController {
     @Ctx() ctx: RequestContext,
     @Body(new ZodValidationPipe(importSchema)) dto: z.infer<typeof importSchema>,
   ) {
-    const results: Array<{ row: number; status: 'ok' | 'error'; message?: string; id?: string }> =
-      [];
-
-    for (const [index, raw] of dto.rows.entries()) {
-      const parsed = employeeCreateSchema.safeParse({
-        ...raw,
-        createUserAccount: false,
-      });
-      if (!parsed.success) {
-        results.push({
-          row: index + 1,
-          status: 'error',
-          message: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '),
-        });
-        continue;
-      }
-      if (dto.dryRun) {
-        results.push({ row: index + 1, status: 'ok' });
-        continue;
-      }
-      try {
-        const employee = await this.people.create(ctx, parsed.data);
-        results.push({ row: index + 1, status: 'ok', id: employee.id });
-      } catch (error) {
-        results.push({ row: index + 1, status: 'error', message: (error as Error).message });
-      }
+    let rows = dto.rows ?? [];
+    let ignoredColumns: string[] = [];
+    if (dto.fileId) {
+      const parsed = await this.employeeImport.rowsFromFile(ctx, dto.fileId);
+      rows = parsed.rows;
+      ignoredColumns = parsed.ignoredColumns;
     }
-
+    const results = await this.employeeImport.importRows(ctx, rows, dto.dryRun);
+    const count = (status: string) => results.filter((r) => r.status === status).length;
     return {
       data: results,
       meta: {
         dryRun: dto.dryRun,
         total: results.length,
-        ok: results.filter((r) => r.status === 'ok').length,
-        errors: results.filter((r) => r.status === 'error').length,
+        created: count('created'),
+        updated: count('updated'),
+        errors: count('error'),
+        ignoredColumns,
       },
     };
   }
 
   @Get('employees/import/template')
   @RequirePermission('people.employee.import')
-  @ApiOperation({ summary: 'Columnas esperadas por la plantilla de importacion' })
-  async importTemplate() {
-    return {
-      columns: [
-        { key: 'firstName', label: 'Nombres', required: true },
-        { key: 'lastName', label: 'Apellidos', required: true },
-        { key: 'secondLastName', label: 'Segundo apellido', required: false },
-        { key: 'documentType', label: 'Tipo de documento', required: false, example: 'CC' },
-        { key: 'documentNumber', label: 'Numero de documento', required: true },
-        { key: 'email', label: 'Correo corporativo', required: true },
-        { key: 'personalEmail', label: 'Correo personal', required: false },
-        { key: 'phone', label: 'Telefono', required: false },
-        { key: 'birthDate', label: 'Fecha de nacimiento (AAAA-MM-DD)', required: false },
-        { key: 'gender', label: 'Genero (male/female/other/undisclosed)', required: false },
-        { key: 'hiredAt', label: 'Fecha de ingreso (AAAA-MM-DD)', required: true },
-        { key: 'positionId', label: 'Id del cargo', required: false },
-        { key: 'departmentId', label: 'Id del area', required: false },
-        { key: 'locationId', label: 'Id de la sede', required: false },
-        { key: 'managerId', label: 'Id del jefe', required: false },
-      ],
-    };
+  @ApiOperation({ summary: 'Plantilla XLSX de importacion con la hoja de catalogos' })
+  async importTemplate(@Ctx() ctx: RequestContext, @Res() res: Response) {
+    const buffer = await this.employeeImport.buildTemplate(ctx);
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Disposition', 'attachment; filename="plantilla-colaboradores.xlsx"');
+    res.send(buffer);
   }
 }

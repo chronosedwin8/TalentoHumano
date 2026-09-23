@@ -98,9 +98,9 @@ export function CareersPage() {
           className="w-44"
         >
           <option value="">Toda modalidad</option>
-          <option value="presencial">Presencial</option>
-          <option value="hibrido">Hibrido</option>
-          <option value="remoto">Remoto</option>
+          <option value="onsite">Presencial</option>
+          <option value="hybrid">Hibrido</option>
+          <option value="remote">Remoto</option>
         </NativeSelect>
         {cities.length ? (
           <NativeSelect

@@ -31,8 +31,10 @@ test.describe('portal publico de empleo', () => {
 
   test('filtra las vacantes por modalidad', async ({ page }) => {
     await page.goto(`/careers/${COMPANY_SLUG}`);
+    // The list renders after the request resolves; counting earlier gives 0.
+    await page.locator('a[href*="/careers/"]').first().waitFor();
     const before = await page.locator('a[href*="/careers/"]').count();
-    await page.getByRole('combobox').first().selectOption('remoto');
+    await page.getByRole('combobox').first().selectOption({ label: 'Remoto' });
     const after = await page.locator('a[href*="/careers/"]').count();
     expect(after).toBeLessThanOrEqual(before);
   });

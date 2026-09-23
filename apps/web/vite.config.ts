@@ -46,6 +46,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': { target: process.env.VITE_API_URL ?? 'http://localhost:3000', changeOrigin: true },
+      '/socket.io': {
+        target: process.env.VITE_API_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   // `vite preview` sirve el build real. Necesita el mismo proxy para poder
@@ -54,6 +59,11 @@ export default defineConfig({
     port: 4173,
     proxy: {
       '/api': { target: process.env.VITE_API_URL ?? 'http://localhost:3000', changeOrigin: true },
+      '/socket.io': {
+        target: process.env.VITE_API_URL ?? 'http://localhost:3000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   build: {

@@ -6,6 +6,7 @@ import { ERROR_CODES } from '@talento/shared';
 import type { Request } from 'express';
 import { IS_PUBLIC_KEY, SKIP_TENANT_KEY } from '../decorators';
 import { BusinessException } from '../exceptions/business.exception';
+import { EncryptionService } from '../crypto/encryption.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessControlService } from '../../core/access/access-control.service';
 import type { RequestContext } from '../types/request-context';
@@ -33,6 +34,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly access: AccessControlService,
+    private readonly encryption: EncryptionService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -41,6 +43,14 @@ export class JwtAuthGuard implements CanActivate {
       context.getClass(),
     ]);
     const request = context.switchToHttp().getRequest<Request & { ctx?: RequestContext }>();
+
+    // Integrations authenticate with an API key instead of a session. The
+    // key carries its own permission list, always at company scope.
+    const apiKey = request.headers['x-api-key'];
+    if (typeof apiKey === 'string' && apiKey.length) {
+      request.ctx = await this.contextForApiKey(apiKey, request);
+      return true;
+    }
 
     const token = this.extractToken(request);
     if (!token) {
@@ -97,6 +107,45 @@ export class JwtAuthGuard implements CanActivate {
     };
 
     return true;
+  }
+
+  private async contextForApiKey(raw: string, request: Request): Promise<RequestContext> {
+    const key = await this.prisma.apiKey.findFirst({
+      where: {
+        keyHash: this.encryption.hash(raw),
+        isActive: true,
+        deletedAt: null,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
+    if (!key) {
+      throw BusinessException.unauthorized(
+        ERROR_CODES.UNAUTHENTICATED,
+        'API key invalida o vencida',
+      );
+    }
+    const [modules] = await Promise.all([
+      this.prisma.companyModule.findMany({
+        where: { companyId: key.companyId, isEnabled: true },
+        include: { module: { select: { key: true } } },
+      }),
+      this.prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } }),
+    ]);
+    return {
+      userId: key.createdById ?? key.id,
+      email: `apikey:${key.keyPrefix}`,
+      companyId: key.companyId,
+      companyUserId: '',
+      employeeId: null,
+      roles: ['api_key'],
+      permissions: key.permissions.map((code) => ({ code, scope: 'company' as const })),
+      modules: modules.map((row) => row.module.key),
+      isSuperadmin: false,
+      sessionId: `apikey:${key.id}`,
+      impersonatedBy: null,
+      ip: this.clientIp(request),
+      userAgent: request.headers['user-agent'],
+    };
   }
 
   private extractToken(request: Request): string | null {
