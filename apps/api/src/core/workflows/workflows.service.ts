@@ -33,10 +33,45 @@ export interface WorkflowResolvedEvent {
 
 export const WORKFLOW_RESOLVED = 'workflow.resolved';
 
-interface StepCondition {
+export interface StepCondition {
   field?: string;
   op?: 'gt' | 'gte' | 'lt' | 'lte' | 'eq' | 'neq' | 'in';
   value?: unknown;
+}
+
+/**
+ * Decides whether a step of an approval flow applies to a given request.
+ *
+ * A step without a condition always applies, so a flow configured with plain
+ * steps behaves as a straight chain. Conditions let a company add, for example,
+ * a second approver only when the absence exceeds a number of days.
+ *
+ * Pure and exported so the rule can be tested without a database.
+ */
+export function matchesStepCondition(
+  condition: StepCondition | null | undefined,
+  context: Record<string, unknown>,
+): boolean {
+  if (!condition || !condition.field || condition.op === undefined) return true;
+  const actual = context[condition.field];
+  const expected = condition.value;
+  switch (condition.op) {
+    case 'gt':
+      return Number(actual) > Number(expected);
+    case 'gte':
+      return Number(actual) >= Number(expected);
+    case 'lt':
+      return Number(actual) < Number(expected);
+    case 'lte':
+      return Number(actual) <= Number(expected);
+    case 'neq':
+      return actual !== expected;
+    case 'in':
+      return Array.isArray(expected) && expected.includes(actual as never);
+    case 'eq':
+    default:
+      return actual === expected;
+  }
 }
 
 /**
@@ -57,7 +92,9 @@ export class WorkflowsService {
     private readonly events: EventEmitter2,
   ) {}
 
-  async start(input: StartWorkflowInput): Promise<{ instanceId: string | null; status: WorkflowStatus }> {
+  async start(
+    input: StartWorkflowInput,
+  ): Promise<{ instanceId: string | null; status: WorkflowStatus }> {
     const definition = await this.prisma.workflowDefinition.findFirst({
       where: {
         companyId: input.companyId,
@@ -136,27 +173,11 @@ export class WorkflowsService {
   }
 
   /** Evaluates a single condition; an empty condition always matches. */
-  private matchesCondition(condition: StepCondition | null, context: Record<string, unknown>): boolean {
-    if (!condition || !condition.field || condition.op === undefined) return true;
-    const actual = context[condition.field];
-    const expected = condition.value;
-    switch (condition.op) {
-      case 'gt':
-        return Number(actual) > Number(expected);
-      case 'gte':
-        return Number(actual) >= Number(expected);
-      case 'lt':
-        return Number(actual) < Number(expected);
-      case 'lte':
-        return Number(actual) <= Number(expected);
-      case 'neq':
-        return actual !== expected;
-      case 'in':
-        return Array.isArray(expected) && expected.includes(actual as never);
-      case 'eq':
-      default:
-        return actual === expected;
-    }
+  private matchesCondition(
+    condition: StepCondition | null,
+    context: Record<string, unknown>,
+  ): boolean {
+    return matchesStepCondition(condition, context);
   }
 
   private async resolveApprover(
@@ -382,11 +403,9 @@ export class WorkflowsService {
     await this.notifications.notify({
       companyId: instance.companyId,
       userIds: [instance.requestedById],
-      eventKey: status === 'approved' ? DOMAIN_EVENTS.WORKFLOW_COMPLETED : DOMAIN_EVENTS.WORKFLOW_REJECTED,
-      title:
-        status === 'approved'
-          ? `Aprobado: ${instance.title}`
-          : `Rechazado: ${instance.title}`,
+      eventKey:
+        status === 'approved' ? DOMAIN_EVENTS.WORKFLOW_COMPLETED : DOMAIN_EVENTS.WORKFLOW_REJECTED,
+      title: status === 'approved' ? `Aprobado: ${instance.title}` : `Rechazado: ${instance.title}`,
       body: comment ?? undefined,
       url: ((instance.context as Record<string, unknown>)?.url as string) ?? '/portal/solicitudes',
       entityType: instance.entityType,
@@ -394,7 +413,12 @@ export class WorkflowsService {
     });
   }
 
-  async delegate(ctx: RequestContext, instanceId: string, toUserId: string, comment?: string | null) {
+  async delegate(
+    ctx: RequestContext,
+    instanceId: string,
+    toUserId: string,
+    comment?: string | null,
+  ) {
     const instance = await this.prisma.workflowInstance.findFirst({
       where: { id: instanceId, companyId: ctx.companyId },
       include: { steps: true },
@@ -448,7 +472,10 @@ export class WorkflowsService {
     const [rows, total] = await Promise.all([
       this.prisma.workflowInstance.findMany({
         where,
-        include: { steps: { orderBy: { position: 'asc' } }, definition: { select: { name: true } } },
+        include: {
+          steps: { orderBy: { position: 'asc' } },
+          definition: { select: { name: true } },
+        },
         orderBy: { createdAt: 'asc' },
         skip: (params.page - 1) * params.limit,
         take: params.limit,

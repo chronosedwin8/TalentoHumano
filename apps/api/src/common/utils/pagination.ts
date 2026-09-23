@@ -12,7 +12,12 @@ export interface Paged<T> {
   meta: ApiMeta;
 }
 
-export function parsePage(params: PageParams): { page: number; limit: number; skip: number; take: number } {
+export function parsePage(params: PageParams): {
+  page: number;
+  limit: number;
+  skip: number;
+  take: number;
+} {
   const page = Math.max(1, Number(params.page) || PAGINATION.DEFAULT_PAGE);
   const limit = Math.min(
     PAGINATION.MAX_LIMIT,

@@ -35,11 +35,15 @@ export class NotificationsController {
     @Query() query: { page?: string; limit?: string; unread?: string },
   ) {
     const { page, limit } = parsePage(query);
-    const { rows, total, unread } = await this.notifications.listForUser(ctx.companyId, ctx.userId, {
-      page,
-      limit,
-      unreadOnly: query.unread === 'true',
-    });
+    const { rows, total, unread } = await this.notifications.listForUser(
+      ctx.companyId,
+      ctx.userId,
+      {
+        page,
+        limit,
+        unreadOnly: query.unread === 'true',
+      },
+    );
     const result = paged(rows, total, page, limit);
     return { data: result.data, meta: { ...result.meta, unread } };
   }
@@ -76,7 +80,9 @@ export class NotificationsController {
   async updatePreferences(
     @Ctx() ctx: RequestContext,
     @Body(new ZodValidationPipe(preferenceSchema))
-    dto: { preferences: Array<{ eventKey: string; channel: NotificationChannel; isEnabled: boolean }> },
+    dto: {
+      preferences: Array<{ eventKey: string; channel: NotificationChannel; isEnabled: boolean }>;
+    },
   ) {
     for (const preference of dto.preferences) {
       await this.prisma.notificationPreference.upsert({

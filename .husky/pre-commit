@@ -1,0 +1,2 @@
+# Solo revisa lo que se va a confirmar, para que el enganche sea rapido.
+pnpm exec lint-staged

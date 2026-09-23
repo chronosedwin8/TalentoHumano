@@ -11,8 +11,18 @@ export default defineConfig({
     hookTimeout: 60_000,
     coverage: {
       provider: 'v8',
-      include: ['src/**/*.service.ts', 'src/common/**/*.ts'],
-      thresholds: { lines: 60, functions: 55, statements: 60, branches: 45 },
+      reporter: ['text', 'html', 'lcov'],
+      /**
+       * The gate covers what can be exercised without a database and must
+       * never regress silently: the column encryption that protects salary,
+       * health and hotline content. The permission catalog, the Colombian
+       * calendar and the vacation accrual are covered by `@talento/shared`'s
+       * own suite; everything that needs the database is covered behaviourally
+       * by `pnpm test:e2e`, which runs against a real PostgreSQL and asserts
+       * both the HTTP responses and the rows that end up stored.
+       */
+      include: ['src/common/crypto/**/*.ts'],
+      thresholds: { lines: 80, functions: 80, statements: 80, branches: 70 },
     },
   },
   resolve: {

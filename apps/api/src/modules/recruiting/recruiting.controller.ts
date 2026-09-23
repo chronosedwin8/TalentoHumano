@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   hireCandidateSchema,
@@ -18,7 +18,7 @@ import { BusinessException } from '../../common/exceptions/business.exception';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged, softDelete } from '../../common/utils/crud';
+import { defined, listPaged } from '../../common/utils/crud';
 import { WorkflowsService } from '../../core/workflows/workflows.service';
 import { RecruitingService } from './recruiting.service';
 
@@ -55,7 +55,10 @@ const stageSchema = z.object({
         id: uuid.optional(),
         name: z.string().trim().min(2).max(120),
         code: z.string().trim().min(2).max(60),
-        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#64748b'),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .default('#64748b'),
         kind: z.string().max(30).default('standard'),
         autoEmailTemplateKey: z.string().max(80).nullable().optional(),
       }),
@@ -209,7 +212,7 @@ export class RecruitingController {
     @Body(new ZodValidationPipe(jobPostingSchema.partial())) dto: Record<string, any>,
   ) {
     const db = this.prisma.forCompany(ctx.companyId);
-    const { salaryRangeMin, salaryRangeMax, competencyIds, closesAt, ...rest } = dto;
+    const { salaryRangeMin, salaryRangeMax, closesAt, ...rest } = dto;
     await db.jobPosting.updateMany({
       where: { id },
       data: {
@@ -230,7 +233,10 @@ export class RecruitingController {
   @RequirePermission('recruiting.job.publish')
   @Audit({ entityType: 'job_posting', action: 'update', summary: 'Publicacion de vacante' })
   @ApiOperation({ summary: 'Publica la vacante en el portal de empleos' })
-  async publishJob(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async publishJob(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.prisma.forCompany(ctx.companyId).jobPosting.update({
       where: { id },
       data: { status: 'published', publishedAt: new Date() },
@@ -342,7 +348,8 @@ export class RecruitingController {
   async reject(
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
-    @Body(new ZodValidationPipe(rejectApplicationSchema)) dto: z.infer<typeof rejectApplicationSchema>,
+    @Body(new ZodValidationPipe(rejectApplicationSchema))
+    dto: z.infer<typeof rejectApplicationSchema>,
   ) {
     return this.recruiting.rejectApplication(ctx, id, dto);
   }
@@ -364,7 +371,10 @@ export class RecruitingController {
   @Get('applications/:id')
   @RequirePermission('recruiting.application.read')
   @ApiOperation({ summary: 'Detalle de la postulacion' })
-  async application(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async application(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.prisma.forCompany(ctx.companyId).application.findFirst({
       where: { id, deletedAt: null },
       include: {
@@ -511,7 +521,10 @@ export class RecruitingController {
   @Get('interviews/:id/ics')
   @RequirePermission('recruiting.interview.read')
   @ApiOperation({ summary: 'Invitacion de calendario (ICS) de la entrevista' })
-  async interviewIcs(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async interviewIcs(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     const interview = await this.prisma.forCompany(ctx.companyId).interview.findFirst({
       where: { id },
       include: { application: { include: { candidate: true, jobPosting: true } } },
@@ -531,7 +544,9 @@ export class RecruitingController {
       `DTEND:${stamp(end)}`,
       `SUMMARY:${interview.title} - ${interview.application.candidate.fullName}`,
       `DESCRIPTION:Vacante ${interview.application.jobPosting.title}`,
-      interview.meetingUrl ? `URL:${interview.meetingUrl}` : `LOCATION:${interview.locationText ?? ''}`,
+      interview.meetingUrl
+        ? `URL:${interview.meetingUrl}`
+        : `LOCATION:${interview.locationText ?? ''}`,
       'END:VEVENT',
       'END:VCALENDAR',
     ].join('\r\n');
@@ -621,7 +636,10 @@ export class RecruitingController {
   @RequirePermission('recruiting.offer.send')
   @Audit({ entityType: 'offer', action: 'update' })
   @ApiOperation({ summary: 'Envia la oferta al candidato' })
-  async sendOffer(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async sendOffer(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.prisma.forCompany(ctx.companyId).offer.update({
       where: { id },
       data: { status: 'sent', sentAt: new Date() },

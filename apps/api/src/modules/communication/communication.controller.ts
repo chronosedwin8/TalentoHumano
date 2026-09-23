@@ -15,7 +15,7 @@ import { BusinessException } from '../../common/exceptions/business.exception';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged, softDelete } from '../../common/utils/crud';
+import { defined, listPaged } from '../../common/utils/crud';
 import { NotificationsService } from '../../core/notifications/notifications.service';
 import { CommunicationService } from './communication.service';
 
@@ -139,14 +139,20 @@ export class CommunicationController {
   @RequirePermission('communication.post.update')
   @Audit({ entityType: 'post', action: 'update' })
   @ApiOperation({ summary: 'Publica la entrada y notifica a la audiencia' })
-  async publishPost(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async publishPost(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.communication.publishPost(ctx, id);
   }
 
   @Post('posts/:id/acknowledge')
   @RequirePermission('communication.post.read')
   @ApiOperation({ summary: 'Confirma la lectura obligatoria de un comunicado' })
-  async acknowledge(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async acknowledge(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.communication.markRead(ctx, id, true);
   }
 
@@ -179,7 +185,10 @@ export class CommunicationController {
     @Param('id', new ZodValidationPipe(uuid)) id: string,
     @Body(
       new ZodValidationPipe(
-        z.object({ body: z.string().trim().min(1).max(4000), parentId: uuid.nullable().optional() }),
+        z.object({
+          body: z.string().trim().min(1).max(4000),
+          parentId: uuid.nullable().optional(),
+        }),
       ),
     )
     dto: { body: string; parentId?: string | null },
@@ -193,7 +202,10 @@ export class CommunicationController {
   @RequirePermission('communication.post.moderate')
   @Audit({ entityType: 'post_comment', action: 'delete' })
   @ApiOperation({ summary: 'Oculta un comentario (moderacion)' })
-  async hideComment(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async hideComment(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     await this.prisma.forCompany(ctx.companyId).postComment.updateMany({
       where: { id },
       data: { isHidden: true },
@@ -204,7 +216,10 @@ export class CommunicationController {
   @Get('posts/:id/read-report')
   @RequirePermission('communication.post.update')
   @ApiOperation({ summary: 'Reporte de lectura y acuses de un comunicado' })
-  async readReport(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async readReport(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.communication.readReport(ctx, id);
   }
 
@@ -243,8 +258,12 @@ export class CommunicationController {
   @Post('events/:id/register')
   @RequirePermission('communication.event.read')
   @ApiOperation({ summary: 'Inscribe al colaborador en un evento' })
-  async registerEvent(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+  async registerEvent(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     return this.prisma.forCompany(ctx.companyId).eventRegistration.upsert({
       where: { eventId_employeeId: { eventId: id, employeeId: ctx.employeeId } },
       create: { eventId: id, employeeId: ctx.employeeId },
@@ -343,7 +362,10 @@ export class CommunicationController {
           name: z.string().trim().min(2).max(120),
           description: z.string().max(1000).nullable().optional(),
           icon: z.string().max(60).nullable().optional(),
-          color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#2563eb'),
+          color: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .default('#2563eb'),
           position: z.number().int().min(0).default(0),
         }),
       ),
@@ -357,7 +379,10 @@ export class CommunicationController {
   @RequirePermission('communication.post.read')
   @ApiOperation({ summary: 'Cumpleanos y aniversarios del mes' })
   async celebrations(@Ctx() ctx: RequestContext, @Query('month') month?: string) {
-    return this.communication.celebrations(ctx, month ? Number(month) : new Date().getUTCMonth() + 1);
+    return this.communication.celebrations(
+      ctx,
+      month ? Number(month) : new Date().getUTCMonth() + 1,
+    );
   }
 
   /* ------------------------------- benefits ----------------------------- */
@@ -393,8 +418,12 @@ export class CommunicationController {
   @Post('benefits/:id/enroll')
   @RequirePermission('communication.benefit.read')
   @ApiOperation({ summary: 'Solicita la inscripcion a un beneficio' })
-  async enrollBenefit(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+  async enrollBenefit(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     return this.prisma.forCompany(ctx.companyId).benefitEnrollment.upsert({
       where: { benefitId_employeeId: { benefitId: id, employeeId: ctx.employeeId } },
       create: { benefitId: id, employeeId: ctx.employeeId },
@@ -434,7 +463,10 @@ export class CommunicationController {
       include: { category: true },
     });
     if (!article) throw BusinessException.notFound('Articulo');
-    await db.wikiArticle.update({ where: { id: article.id }, data: { viewCount: { increment: 1 } } });
+    await db.wikiArticle.update({
+      where: { id: article.id },
+      data: { viewCount: { increment: 1 } },
+    });
     return article;
   }
 

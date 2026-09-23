@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { AttendanceStatus, ClockSource, ClockType } from '@prisma/client';
-import { DOMAIN_EVENTS, ERROR_CODES, distanceMeters, fromDateKey, toDateKey } from '@talento/shared';
+import {
+  DOMAIN_EVENTS,
+  ERROR_CODES,
+  distanceMeters,
+  fromDateKey,
+  toDateKey,
+} from '@talento/shared';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
@@ -48,7 +54,10 @@ export class TimeService {
     });
 
     if (last) {
-      if (Math.abs(occurredAt.getTime() - last.occurredAt.getTime()) < 60_000 && last.type === input.type) {
+      if (
+        Math.abs(occurredAt.getTime() - last.occurredAt.getTime()) < 60_000 &&
+        last.type === input.type
+      ) {
         throw new BusinessException(
           ERROR_CODES.CLOCK_DUPLICATE,
           'Ya se registro una marcacion identica hace menos de un minuto',

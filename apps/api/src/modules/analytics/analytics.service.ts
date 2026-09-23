@@ -16,7 +16,11 @@ import { ScopeService } from '../../core/access/scope.service';
 /** Safe datasets exposed to the report builder (no raw SQL from the client). */
 export const DATASETS: Record<
   string,
-  { label: string; columns: Array<{ key: string; label: string; type: string }>; permission: string }
+  {
+    label: string;
+    columns: Array<{ key: string; label: string; type: string }>;
+    permission: string;
+  }
 > = {
   employees: {
     label: 'Colaboradores',
@@ -112,7 +116,9 @@ export class AnalyticsService {
 
   async executiveDashboard(ctx: RequestContext, filters: AnalyticsFilters) {
     const companyId = ctx.companyId;
-    const from = filters.from ? new Date(filters.from) : new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
+    const from = filters.from
+      ? new Date(filters.from)
+      : new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
     const to = filters.to ? new Date(filters.to) : new Date();
 
     const employeeWhere: Prisma.EmployeeWhereInput = {
@@ -124,48 +130,58 @@ export class AnalyticsService {
       ...(filters.gender ? { gender: filters.gender as never } : {}),
     };
 
-    const [headcount, hires, terminations, voluntary, openJobs, mandatoryTraining, absences, tickets, ethics, expiring] =
-      await Promise.all([
-        this.prisma.employee.count({ where: { ...employeeWhere, status: 'active' } }),
-        this.prisma.employee.count({ where: { ...employeeWhere, hiredAt: { gte: from, lte: to } } }),
-        this.prisma.employee.count({
-          where: { ...employeeWhere, terminatedAt: { gte: from, lte: to } },
-        }),
-        this.prisma.employee.count({
-          where: {
-            ...employeeWhere,
-            terminatedAt: { gte: from, lte: to },
-            exitReason: { in: ['renuncia', 'mutuo_acuerdo'] },
-          },
-        }),
-        this.prisma.jobPosting.count({ where: { companyId, status: 'published', deletedAt: null } }),
-        this.prisma.enrollment.findMany({
-          where: { companyId, course: { isMandatory: true } },
-          select: { status: true },
-        }),
-        this.prisma.leaveRequest.aggregate({
-          where: {
-            companyId,
-            deletedAt: null,
-            status: { in: ['approved', 'taken'] },
-            startDate: { gte: from, lte: to },
-          },
-          _sum: { requestedDays: true },
-        }),
-        this.prisma.ticket.count({
-          where: { companyId, deletedAt: null, status: { in: ['new', 'open', 'on_hold'] } },
-        }),
-        this.prisma.ethicsReport.count({
-          where: { companyId, status: { in: ['received', 'triaged', 'in_investigation'] } },
-        }),
-        this.prisma.employeeDocument.count({
-          where: {
-            companyId,
-            deletedAt: null,
-            expiresAt: { not: null, lte: new Date(Date.now() + 30 * 86_400_000) },
-          },
-        }),
-      ]);
+    const [
+      headcount,
+      hires,
+      terminations,
+      voluntary,
+      openJobs,
+      mandatoryTraining,
+      absences,
+      tickets,
+      ethics,
+      expiring,
+    ] = await Promise.all([
+      this.prisma.employee.count({ where: { ...employeeWhere, status: 'active' } }),
+      this.prisma.employee.count({ where: { ...employeeWhere, hiredAt: { gte: from, lte: to } } }),
+      this.prisma.employee.count({
+        where: { ...employeeWhere, terminatedAt: { gte: from, lte: to } },
+      }),
+      this.prisma.employee.count({
+        where: {
+          ...employeeWhere,
+          terminatedAt: { gte: from, lte: to },
+          exitReason: { in: ['renuncia', 'mutuo_acuerdo'] },
+        },
+      }),
+      this.prisma.jobPosting.count({ where: { companyId, status: 'published', deletedAt: null } }),
+      this.prisma.enrollment.findMany({
+        where: { companyId, course: { isMandatory: true } },
+        select: { status: true },
+      }),
+      this.prisma.leaveRequest.aggregate({
+        where: {
+          companyId,
+          deletedAt: null,
+          status: { in: ['approved', 'taken'] },
+          startDate: { gte: from, lte: to },
+        },
+        _sum: { requestedDays: true },
+      }),
+      this.prisma.ticket.count({
+        where: { companyId, deletedAt: null, status: { in: ['new', 'open', 'on_hold'] } },
+      }),
+      this.prisma.ethicsReport.count({
+        where: { companyId, status: { in: ['received', 'triaged', 'in_investigation'] } },
+      }),
+      this.prisma.employeeDocument.count({
+        where: {
+          companyId,
+          deletedAt: null,
+          expiresAt: { not: null, lte: new Date(Date.now() + 30 * 86_400_000) },
+        },
+      }),
+    ]);
 
     const averageHeadcount = headcount + terminations / 2 || 1;
     const turnover = round((terminations / averageHeadcount) * 100, 2);
@@ -178,7 +194,13 @@ export class AnalyticsService {
     const kpis: KpiValue[] = [
       { key: 'headcount', label: 'Colaboradores activos', value: headcount, unit: 'count' },
       { key: 'hires', label: 'Ingresos del periodo', value: hires, unit: 'count' },
-      { key: 'terminations', label: 'Retiros del periodo', value: terminations, unit: 'count', inverse: true },
+      {
+        key: 'terminations',
+        label: 'Retiros del periodo',
+        value: terminations,
+        unit: 'count',
+        inverse: true,
+      },
       { key: 'turnover', label: 'Rotacion', value: turnover, unit: 'percent', inverse: true },
       {
         key: 'voluntaryTurnover',
@@ -187,7 +209,13 @@ export class AnalyticsService {
         unit: 'percent',
         inverse: true,
       },
-      { key: 'absenteeism', label: 'Ausentismo', value: absenteeism, unit: 'percent', inverse: true },
+      {
+        key: 'absenteeism',
+        label: 'Ausentismo',
+        value: absenteeism,
+        unit: 'percent',
+        inverse: true,
+      },
       { key: 'openJobs', label: 'Vacantes abiertas', value: openJobs, unit: 'count' },
       {
         key: 'mandatoryTraining',
@@ -195,8 +223,20 @@ export class AnalyticsService {
         value: mandatoryTraining.length ? percent(mandatoryDone, mandatoryTraining.length) : 100,
         unit: 'percent',
       },
-      { key: 'openTickets', label: 'Tickets abiertos', value: tickets, unit: 'count', inverse: true },
-      { key: 'ethicsOpen', label: 'Denuncias en curso', value: ethics, unit: 'count', inverse: true },
+      {
+        key: 'openTickets',
+        label: 'Tickets abiertos',
+        value: tickets,
+        unit: 'count',
+        inverse: true,
+      },
+      {
+        key: 'ethicsOpen',
+        label: 'Denuncias en curso',
+        value: ethics,
+        unit: 'count',
+        inverse: true,
+      },
       {
         key: 'expiringDocuments',
         label: 'Documentos por vencer',
@@ -206,13 +246,15 @@ export class AnalyticsService {
       },
     ];
 
-    const [byDepartment, byLocation, byContract, demographics, headcountSeries] = await Promise.all([
-      this.groupEmployees(companyId, 'departmentId', employeeWhere),
-      this.groupEmployees(companyId, 'locationId', employeeWhere),
-      this.contractDistribution(companyId),
-      this.demographics(companyId, employeeWhere),
-      this.headcountSeries(companyId, 12),
-    ]);
+    const [byDepartment, byLocation, byContract, demographics, headcountSeries] = await Promise.all(
+      [
+        this.groupEmployees(companyId, 'departmentId', employeeWhere),
+        this.groupEmployees(companyId, 'locationId', employeeWhere),
+        this.contractDistribution(companyId),
+        this.demographics(companyId, employeeWhere),
+        this.headcountSeries(companyId, 12),
+      ],
+    );
 
     return {
       period: { from: toDateKey(from), to: toDateKey(to) },
@@ -352,7 +394,12 @@ export class AnalyticsService {
     });
     const active = employees.filter((e) => !e.terminatedAt || e.terminatedAt > day);
 
-    const write = async (metric: string, dimension: string, dimensionValue: string, value: number) => {
+    const write = async (
+      metric: string,
+      dimension: string,
+      dimensionValue: string,
+      value: number,
+    ) => {
       await this.prisma.hrSnapshot.upsert({
         where: {
           companyId_snapshotDate_metric_dimension_dimensionValue: {
@@ -556,7 +603,10 @@ export class AnalyticsService {
 
     const documents = await this.prisma.employeeDocument.findMany({
       where: { companyId, deletedAt: null, expiresAt: { not: null, lte: horizon } },
-      include: { employee: { select: { fullName: true } }, documentType: { select: { name: true } } },
+      include: {
+        employee: { select: { fullName: true } },
+        documentType: { select: { name: true } },
+      },
       take: 200,
     });
     for (const document of documents) {
@@ -634,7 +684,12 @@ export class AnalyticsService {
 
   async runReport(
     ctx: RequestContext,
-    definition: { dataset: string; columns: string[]; filters?: Record<string, unknown>; groupBy?: string[] },
+    definition: {
+      dataset: string;
+      columns: string[];
+      filters?: Record<string, unknown>;
+      groupBy?: string[];
+    },
   ) {
     const dataset = DATASETS[definition.dataset];
     if (!dataset) throw new Error('Dataset no valido');
@@ -713,7 +768,10 @@ export class AnalyticsService {
       case 'leaves': {
         const rows = await this.prisma.leaveRequest.findMany({
           where: { companyId, deletedAt: null },
-          include: { employee: { select: { fullName: true } }, leaveType: { select: { name: true } } },
+          include: {
+            employee: { select: { fullName: true } },
+            leaveType: { select: { name: true } },
+          },
           take: 10_000,
         });
         return rows.map((row) => ({
@@ -806,7 +864,9 @@ export class AnalyticsService {
     const ids = teamIds.filter((id) => id !== ctx.employeeId);
     if (!ids.length) return { team: [], pendingApprovals: 0, absencesThisMonth: 0 };
 
-    const startOfMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+    const startOfMonth = new Date(
+      Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+    );
 
     const [team, absences, objectives, reviews, training] = await Promise.all([
       this.prisma.employee.findMany({

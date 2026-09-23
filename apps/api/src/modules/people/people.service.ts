@@ -426,7 +426,10 @@ export class PeopleService {
     });
 
     if (employee.userId) {
-      await this.prisma.user.update({ where: { id: employee.userId }, data: { status: 'inactive' } });
+      await this.prisma.user.update({
+        where: { id: employee.userId },
+        data: { status: 'inactive' },
+      });
       await this.prisma.session.updateMany({
         where: { userId: employee.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -510,7 +513,8 @@ export class PeopleService {
   ]);
 
   async selfUpdate(ctx: RequestContext, input: Record<string, unknown>) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     const employee = await this.prisma.employee.findFirst({
       where: { id: ctx.employeeId, companyId: ctx.companyId },
     });
@@ -556,7 +560,11 @@ export class PeopleService {
       changeRequestId = request.id;
     }
 
-    return { applied: Object.keys(direct), pendingApproval: Object.keys(requiresApproval), changeRequestId };
+    return {
+      applied: Object.keys(direct),
+      pendingApproval: Object.keys(requiresApproval),
+      changeRequestId,
+    };
   }
 
   async decideChangeRequest(

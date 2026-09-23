@@ -58,7 +58,7 @@ export class EncryptionService {
       decipher.setAuthTag(tag);
       return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
     } catch {
-      this.logger.error('No fue posible descifrar un valor sensible');
+      this.logger.error('Could not decrypt a sensitive value');
       return null;
     }
   }

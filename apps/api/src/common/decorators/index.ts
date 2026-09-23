@@ -1,8 +1,4 @@
-import {
-  SetMetadata,
-  createParamDecorator,
-  type ExecutionContext,
-} from '@nestjs/common';
+import { SetMetadata, createParamDecorator, type ExecutionContext } from '@nestjs/common';
 import type { RequestContext } from '../types/request-context';
 
 export const IS_PUBLIC_KEY = 'talento:isPublic';
@@ -55,15 +51,19 @@ export const Audit = (metadata: AuditMetadata) => SetMetadata(AUDIT_KEY, metadat
 export const SensitiveAccess = (entityType: string) => SetMetadata(SENSITIVE_KEY, entityType);
 
 /** Injects the resolved request context. */
-export const Ctx = createParamDecorator((_data: unknown, context: ExecutionContext): RequestContext => {
-  const request = context.switchToHttp().getRequest();
-  return request.ctx;
-});
+export const Ctx = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): RequestContext => {
+    const request = context.switchToHttp().getRequest();
+    return request.ctx;
+  },
+);
 
 /** Injects the raw client IP, honouring the reverse proxy header. */
-export const ClientIp = createParamDecorator((_data: unknown, context: ExecutionContext): string => {
-  const request = context.switchToHttp().getRequest();
-  const forwarded = request.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string' && forwarded.length) return forwarded.split(',')[0].trim();
-  return request.ip ?? '';
-});
+export const ClientIp = createParamDecorator(
+  (_data: unknown, context: ExecutionContext): string => {
+    const request = context.switchToHttp().getRequest();
+    const forwarded = request.headers['x-forwarded-for'];
+    if (typeof forwarded === 'string' && forwarded.length) return forwarded.split(',')[0].trim();
+    return request.ip ?? '';
+  },
+);

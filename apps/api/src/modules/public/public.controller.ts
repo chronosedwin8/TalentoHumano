@@ -6,14 +6,45 @@ import {
   ethicsMessageSchema,
   ethicsReportSchema,
   publicApplicationSchema,
+  uuid,
 } from '@talento/shared';
 import { z } from 'zod';
 import { Public } from '../../common/decorators';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { FilesService } from '../../core/files/files.service';
 import { EthicsService } from '../ethics/ethics.service';
 import { RecruitingService } from '../recruiting/recruiting.service';
+
+/** Documents a candidate or a whistleblower may attach, nothing else. */
+const PUBLIC_UPLOAD_MIME = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/png',
+  'image/jpeg',
+];
+
+/**
+ * Reports per hour and per IP accepted by the hotline.
+ *
+ * A whole office shares one public address, so a tight limit would silently
+ * block the sixth person who wants to report something on the same day. The
+ * limit is here to stop flooding, not to ration a whistleblowing channel, and
+ * it is tunable for companies whose network shape needs more room.
+ */
+const ETHICS_REPORT_LIMIT = Number(process.env.ETHICS_REPORT_LIMIT ?? 20);
+
+const publicUploadSchema = z.object({
+  filename: z.string().trim().min(1).max(240),
+  mimeType: z.string().trim().max(160),
+  size: z
+    .number()
+    .int()
+    .min(1)
+    .max(10 * 1024 * 1024),
+});
 
 /**
  * Public surface: careers portal and ethics hotline.
@@ -28,7 +59,54 @@ export class PublicController {
     private readonly recruiting: RecruitingService,
     private readonly ethics: EthicsService,
     private readonly prisma: PrismaService,
+    private readonly files: FilesService,
   ) {}
+
+  /* ---------------------------- public uploads -------------------------- */
+
+  /**
+   * Lets a candidate attach a resume, or a whistleblower attach evidence,
+   * without a session. The file belongs to the target company from the start,
+   * the MIME allow-list is narrower than the internal one, and the quota is
+   * tight so the endpoint cannot be used as free storage.
+   */
+  @Post(':companySlug/uploads')
+  @Throttle({ default: { limit: 10, ttl: 3_600_000 } })
+  @ApiOperation({ summary: 'URL prefirmada para adjuntar un archivo sin sesion' })
+  async presignPublicUpload(
+    @Param('companySlug') companySlug: string,
+    @Body(new ZodValidationPipe(publicUploadSchema)) dto: z.infer<typeof publicUploadSchema>,
+  ) {
+    const company = await this.prisma.company.findFirst({
+      where: { slug: companySlug, isActive: true, deletedAt: null },
+      select: { id: true },
+    });
+    if (!company) throw BusinessException.notFound('Empresa');
+    if (!PUBLIC_UPLOAD_MIME.includes(dto.mimeType)) {
+      throw BusinessException.validation('Solo se aceptan archivos PDF, Word o imagen');
+    }
+
+    return this.files.presignUpload(
+      { companyId: company.id, userId: null } as never,
+      { ...dto, visibility: 'private' } as never,
+    );
+  }
+
+  @Post(':companySlug/uploads/:fileId/confirm')
+  @Throttle({ default: { limit: 20, ttl: 3_600_000 } })
+  @ApiOperation({ summary: 'Confirma la subida de un adjunto publico' })
+  async confirmPublicUpload(
+    @Param('companySlug') companySlug: string,
+    @Param('fileId', new ZodValidationPipe(uuid)) fileId: string,
+  ) {
+    const company = await this.prisma.company.findFirst({
+      where: { slug: companySlug, isActive: true, deletedAt: null },
+      select: { id: true },
+    });
+    if (!company) throw BusinessException.notFound('Empresa');
+    await this.files.confirmUpload({ companyId: company.id } as never, fileId);
+    return { fileId };
+  }
 
   /* ---------------------------- careers portal -------------------------- */
 
@@ -59,7 +137,8 @@ export class PublicController {
   async apply(
     @Param('companySlug') companySlug: string,
     @Param('jobSlug') jobSlug: string,
-    @Body(new ZodValidationPipe(publicApplicationSchema)) dto: z.infer<typeof publicApplicationSchema>,
+    @Body(new ZodValidationPipe(publicApplicationSchema))
+    dto: z.infer<typeof publicApplicationSchema>,
   ) {
     return this.recruiting.apply(companySlug, jobSlug, dto);
   }
@@ -74,7 +153,7 @@ export class PublicController {
   }
 
   @Post('ethics/:companySlug/reports')
-  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @Throttle({ default: { limit: ETHICS_REPORT_LIMIT, ttl: 3_600_000 } })
   @ApiOperation({
     summary: 'Envia una denuncia; devuelve codigo de seguimiento y clave (no se registra IP)',
   })

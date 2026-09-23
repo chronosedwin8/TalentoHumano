@@ -1,5 +1,27 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
+import { ERROR_CODES } from '@talento/shared';
+
+/** Refuses a write that would reach a row belonging to another company. */
+class TenantMismatchError extends HttpException {
+  constructor(model: string) {
+    super(
+      {
+        code: ERROR_CODES.TENANT_MISMATCH,
+        message: 'El registro pertenece a otra empresa',
+        details: { model },
+      },
+      HttpStatus.FORBIDDEN,
+    );
+  }
+}
 
 /** Prisma model names (delegate keys) that carry a `companyId` column. */
 const MODELS_WITH_COMPANY = new Set<string>(
@@ -49,11 +71,7 @@ function buildTenantClient(base: PrismaClient, companyId: string) {
 
           if (READ_OPERATIONS.has(operation) || WRITE_WITH_WHERE.has(operation)) {
             const where = (a.where ?? {}) as Record<string, any>;
-            const previous = Array.isArray(where.AND)
-              ? where.AND
-              : where.AND
-                ? [where.AND]
-                : [];
+            const previous = Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : [];
             a.where = { ...where, AND: [...previous, companyFilter] };
             return query(a as never);
           }
@@ -73,6 +91,31 @@ function buildTenantClient(base: PrismaClient, companyId: string) {
 
           if (operation === 'upsert') {
             a.create = { companyId, ...(a.create ?? {}) };
+
+            /**
+             * `upsert` has the same blind spot as `findUnique`: its `where`
+             * only accepts unique fields, so the tenant filter cannot be
+             * added to it. Left alone, a unique key that happens to match a
+             * row of another company would update that row.
+             *
+             * So the row is resolved first with the tenant filter applied. If
+             * it exists in this company, it is updated by id; if it exists in
+             * another one, the write is refused instead of silently crossing
+             * the boundary; if it does not exist, the create runs as usual.
+             */
+            const existing = (await (base as never as Record<string, any>)[
+              model.charAt(0).toLowerCase() + model.slice(1)
+            ].findFirst({
+              where: a.where,
+              select: { id: true, companyId: true },
+            })) as { id: string; companyId: string | null } | null;
+
+            if (existing && existing.companyId !== companyId && existing.companyId !== null) {
+              throw new TenantMismatchError(model);
+            }
+            if (existing) {
+              a.where = { id: existing.id };
+            }
             return query(a as never);
           }
 
@@ -119,14 +162,17 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     super({
       log:
         process.env.NODE_ENV === 'development'
-          ? [{ emit: 'stdout', level: 'warn' }, { emit: 'stdout', level: 'error' }]
+          ? [
+              { emit: 'stdout', level: 'warn' },
+              { emit: 'stdout', level: 'error' },
+            ]
           : [{ emit: 'stdout', level: 'error' }],
     });
   }
 
   async onModuleInit(): Promise<void> {
     await this.$connect();
-    this.logger.log('Conexion a PostgreSQL establecida');
+    this.logger.log('Connected to PostgreSQL');
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -147,7 +193,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   /** Truncates every table. Only used by the e2e test harness. */
   async truncateAll(): Promise<void> {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('truncateAll no esta permitido en produccion');
+      throw new Error('truncateAll is not allowed in production');
     }
     const tables = Prisma.dmmf.datamodel.models.map((m) => `"${m.dbName ?? m.name}"`);
     await this.$executeRawUnsafe(`TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY CASCADE;`);

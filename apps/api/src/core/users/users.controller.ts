@@ -51,7 +51,8 @@ export class UsersController {
   @ApiOperation({ summary: 'Usuarios de la empresa con sus roles' })
   async list(
     @Ctx() ctx: RequestContext,
-    @Query() query: { page?: string; limit?: string; search?: string; status?: string; roleId?: string },
+    @Query()
+    query: { page?: string; limit?: string; search?: string; status?: string; roleId?: string },
   ) {
     const { page, limit } = parsePage(query);
     const { rows, total } = await this.users.list(ctx, {
@@ -82,7 +83,11 @@ export class UsersController {
   async setRoles(
     @Ctx() ctx: RequestContext,
     @Param('userId', new ZodValidationPipe(uuid)) userId: string,
-    @Body(new ZodValidationPipe(z.object({ companyUserId: z.string().uuid(), roleIds: z.array(z.string().uuid()) })))
+    @Body(
+      new ZodValidationPipe(
+        z.object({ companyUserId: z.string().uuid(), roleIds: z.array(z.string().uuid()) }),
+      ),
+    )
     dto: { companyUserId: string; roleIds: string[] },
   ) {
     await this.users.assignRoles(ctx, dto.companyUserId, dto.roleIds);
@@ -104,7 +109,11 @@ export class UsersController {
 
   @Post(':userId/reset-password')
   @RequirePermission('settings.user.update')
-  @Audit({ entityType: 'user', idParam: 'userId', summary: 'Restablecimiento de contrasena por administrador' })
+  @Audit({
+    entityType: 'user',
+    idParam: 'userId',
+    summary: 'Restablecimiento de contrasena por administrador',
+  })
   @ApiOperation({ summary: 'Genera una contrasena temporal y la envia por correo' })
   async resetPassword(
     @Ctx() ctx: RequestContext,
@@ -148,7 +157,10 @@ export class UsersController {
   @RequirePermission('settings.role.delete')
   @Audit({ entityType: 'role', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un rol personalizado' })
-  async deleteRole(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async deleteRole(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.users.deleteRole(ctx, id);
   }
 
@@ -176,7 +188,10 @@ export class UsersController {
   @RequirePermission('settings.delegation.manage')
   @Audit({ entityType: 'delegation', action: 'delete' })
   @ApiOperation({ summary: 'Revoca una delegacion' })
-  async revokeDelegation(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async revokeDelegation(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.users.revokeDelegation(ctx, id);
   }
 }

@@ -6,6 +6,8 @@ import {
   CO_VACATION_DAYS_PER_YEAR,
   DOMAIN_EVENTS,
   ERROR_CODES,
+  accrueVacationDays,
+  availableLeaveDays,
   colombianHolidays,
   countDays,
   fromDateKey,
@@ -81,7 +83,11 @@ export class LeavesService {
    * Colombia: 15 business days per completed year of service. Days only,
    * never money.
    */
-  async recalculateBalance(companyId: string, employeeId: string, year = new Date().getUTCFullYear()) {
+  async recalculateBalance(
+    companyId: string,
+    employeeId: string,
+    year = new Date().getUTCFullYear(),
+  ) {
     const employee = await this.prisma.employee.findFirst({
       where: { id: employeeId, companyId },
       select: { hiredAt: true, terminatedAt: true },
@@ -101,16 +107,13 @@ export class LeavesService {
 
     const yearStart = new Date(Date.UTC(year, 0, 1));
     const yearEnd = new Date(Date.UTC(year, 11, 31));
-    const start = employee.hiredAt > yearStart ? employee.hiredAt : yearStart;
-    const end = employee.terminatedAt && employee.terminatedAt < yearEnd ? employee.terminatedAt : yearEnd;
-    const today = new Date();
-    const effectiveEnd = end > today ? today : end;
-
-    const daysWorked = Math.max(
-      0,
-      Math.floor((effectiveEnd.getTime() - start.getTime()) / 86_400_000) + 1,
-    );
-    const accrued = Number(((daysWorked / 365) * daysPerYear).toFixed(2));
+    // Prorated entitlement; see accrueVacationDays in @talento/shared.
+    const accrued = accrueVacationDays({
+      hiredAt: employee.hiredAt,
+      terminatedAt: employee.terminatedAt,
+      year,
+      daysPerYear,
+    });
 
     const [taken, pending, adjustments] = await Promise.all([
       this.prisma.leaveRequest.aggregate({
@@ -175,21 +178,14 @@ export class LeavesService {
   async balanceFor(companyId: string, employeeId: string, year = new Date().getUTCFullYear()) {
     const balance = await this.recalculateBalance(companyId, employeeId, year);
     if (!balance) return null;
-    const available =
-      Number(balance.accruedDays) +
-      Number(balance.adjustedDays) +
-      Number(balance.carryOverDays) -
-      Number(balance.takenDays) -
-      Number(balance.pendingDays);
-    return {
-      year,
+    const summary = {
       accruedDays: Number(balance.accruedDays),
       takenDays: Number(balance.takenDays),
       pendingDays: Number(balance.pendingDays),
       adjustedDays: Number(balance.adjustedDays),
       carryOverDays: Number(balance.carryOverDays),
-      availableDays: Number(available.toFixed(2)),
     };
+    return { year, ...summary, availableDays: availableLeaveDays(summary) };
   }
 
   async adjustBalance(
@@ -248,7 +244,8 @@ export class LeavesService {
 
   async createRequest(ctx: RequestContext, input: LeaveRequestInput) {
     const employeeId = input.employeeId ?? ctx.employeeId;
-    if (!employeeId) throw BusinessException.forbidden('No hay colaborador asociado a la solicitud');
+    if (!employeeId)
+      throw BusinessException.forbidden('No hay colaborador asociado a la solicitud');
 
     if (employeeId !== ctx.employeeId) {
       await this.scope.assertEmployeeInScope(ctx, 'leaves.request.create', employeeId);
@@ -411,8 +408,15 @@ export class LeavesService {
     });
   }
 
-  /** Reacts to the approval engine resolving a leave request. */
-  @OnEvent(WORKFLOW_RESOLVED, { async: true })
+  /**
+   * Reacts to the approval engine resolving a leave request.
+   *
+   * Deliberately without `async: true`: that option makes the emitter dispatch
+   * without awaiting, and the approval endpoint would answer before the
+   * request changed state. The approver would refresh the inbox and still see
+   * it pending, so they would approve again.
+   */
+  @OnEvent(WORKFLOW_RESOLVED)
   async onWorkflowResolved(event: WorkflowResolvedEvent): Promise<void> {
     if (event.entityType !== LEAVE_ENTITY) return;
     await this.applyDecision(
@@ -433,7 +437,10 @@ export class LeavesService {
   ): Promise<void> {
     const request = await this.prisma.leaveRequest.findFirst({
       where: { id: requestId, companyId },
-      include: { leaveType: true, employee: { select: { id: true, userId: true, fullName: true } } },
+      include: {
+        leaveType: true,
+        employee: { select: { id: true, userId: true, fullName: true } },
+      },
     });
     if (!request || ['approved', 'rejected', 'cancelled'].includes(request.status)) {
       if (!request || request.status !== 'pending') return;
@@ -453,13 +460,18 @@ export class LeavesService {
       await this.syncAttendance(companyId, requestId);
     }
 
-    await this.recalculateBalance(companyId, request.employeeId, request.startDate.getUTCFullYear());
+    await this.recalculateBalance(
+      companyId,
+      request.employeeId,
+      request.startDate.getUTCFullYear(),
+    );
 
     if (request.employee.userId) {
       await this.notifications.notify({
         companyId,
         userIds: [request.employee.userId],
-        eventKey: decision === 'approved' ? DOMAIN_EVENTS.LEAVE_APPROVED : DOMAIN_EVENTS.LEAVE_REJECTED,
+        eventKey:
+          decision === 'approved' ? DOMAIN_EVENTS.LEAVE_APPROVED : DOMAIN_EVENTS.LEAVE_REJECTED,
         title:
           decision === 'approved'
             ? `Su solicitud de ${request.leaveType.name} fue aprobada`
@@ -479,7 +491,9 @@ export class LeavesService {
 
   /** Marks the affected attendance days as leave. */
   private async syncAttendance(companyId: string, requestId: string): Promise<void> {
-    const request = await this.prisma.leaveRequest.findFirst({ where: { id: requestId, companyId } });
+    const request = await this.prisma.leaveRequest.findFirst({
+      where: { id: requestId, companyId },
+    });
     if (!request) return;
     for (
       let day = new Date(request.startDate);
@@ -522,7 +536,11 @@ export class LeavesService {
       where: { leaveRequestId: id },
       data: { status: 'pending', leaveRequestId: null },
     });
-    await this.recalculateBalance(ctx.companyId, request.employeeId, request.startDate.getUTCFullYear());
+    await this.recalculateBalance(
+      ctx.companyId,
+      request.employeeId,
+      request.startDate.getUTCFullYear(),
+    );
     await this.events.emitAsync(DOMAIN_EVENTS.LEAVE_CANCELLED, {
       companyId: ctx.companyId,
       leaveRequestId: id,
@@ -683,7 +701,9 @@ export class LeavesService {
           deletedAt: null,
           startDate: { lte: to, gte: from },
         },
-        include: { employee: { select: { employeeCode: true, documentNumber: true, fullName: true } } },
+        include: {
+          employee: { select: { employeeCode: true, documentNumber: true, fullName: true } },
+        },
       });
       for (const event of events) {
         rows.push({
@@ -709,12 +729,15 @@ export class LeavesService {
           date: { gte: from, lte: to },
           OR: [{ overtimeMinutes: { gt: 0 } }, { status: 'absent' }],
         },
-        include: { employee: { select: { employeeCode: true, documentNumber: true, fullName: true } } },
+        include: {
+          employee: { select: { employeeCode: true, documentNumber: true, fullName: true } },
+        },
       });
       for (const day of attendance) {
         rows.push({
           tipo: 'ASISTENCIA',
-          codigo_novedad: day.status === 'absent' ? 'AUSENCIA_INJUSTIFICADA' : 'HORAS_EXTRA_INFORMATIVAS',
+          codigo_novedad:
+            day.status === 'absent' ? 'AUSENCIA_INJUSTIFICADA' : 'HORAS_EXTRA_INFORMATIVAS',
           concepto: day.status,
           codigo_empleado: day.employee.employeeCode,
           documento: day.employee.documentNumber,

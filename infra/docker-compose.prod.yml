@@ -1,0 +1,122 @@
+# Production stack. Run from the repository root:
+#   docker compose -f infra/docker-compose.prod.yml --env-file .env up -d --build
+#
+# Every secret comes from the environment; nothing is hardcoded here.
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-talento}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./backups:/backups
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-talento}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Not published: only the API reaches it, over the internal network.
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '--pass', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    image: talento/api:${TAG:-latest}
+    restart: always
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-talento}?schema=public
+      REDIS_ENABLED: 'true'
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET}
+      COOKIE_SECRET: ${COOKIE_SECRET:?set COOKIE_SECRET}
+      # Losing this key makes every encrypted column unreadable: back it up
+      # separately from the database, never together with it.
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY}
+      WEB_URL: ${WEB_URL:?set WEB_URL}
+      CORS_ORIGINS: ${WEB_URL}
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      MAIL_DRIVER: ${MAIL_DRIVER:-smtp}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+    volumes:
+      - api-storage:/app/apps/api/storage
+    networks: [internal, edge]
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Same origin: nginx routes /api to the API container.
+        VITE_API_URL: ''
+    image: talento/web:${TAG:-latest}
+    restart: always
+    networks: [edge]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    depends_on: [api, web]
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      SERVER_NAME: ${SERVER_NAME:?set SERVER_NAME}
+    volumes:
+      - ./nginx/talento.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot
+      - nginx-logs:/var/log/nginx
+    networks: [edge]
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    # Renews twice a day; certbot exits immediately when nothing is due.
+    entrypoint: /bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'
+    networks: [edge]
+
+volumes:
+  postgres-data:
+  redis-data:
+  api-storage:
+  nginx-logs:
+
+networks:
+  # The database and the cache are never reachable from the edge network.
+  internal:
+  edge:

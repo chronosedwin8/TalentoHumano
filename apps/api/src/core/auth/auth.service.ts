@@ -4,12 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { authenticator } from 'otplib';
 import { randomUUID } from 'node:crypto';
-import {
-  DEFAULT_TIMEZONE,
-  ERROR_CODES,
-  type LoginInput,
-  type SessionUser,
-} from '@talento/shared';
+import { DEFAULT_TIMEZONE, ERROR_CODES, type LoginInput, type SessionUser } from '@talento/shared';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
@@ -63,7 +58,10 @@ export class AuthService {
     if (!user || !user.passwordHash) {
       // Same error and timing shape for unknown users and wrong passwords.
       await argon2.hash('timing-equalizer').catch(() => undefined);
-      throw BusinessException.unauthorized(ERROR_CODES.INVALID_CREDENTIALS, 'Credenciales invalidas');
+      throw BusinessException.unauthorized(
+        ERROR_CODES.INVALID_CREDENTIALS,
+        'Credenciales invalidas',
+      );
     }
 
     if (user.lockedUntil && user.lockedUntil > new Date()) {
@@ -76,7 +74,10 @@ export class AuthService {
     const valid = await argon2.verify(user.passwordHash, input.password).catch(() => false);
     if (!valid) {
       await this.registerFailedAttempt(user.id, user.failedLoginAttempts);
-      throw BusinessException.unauthorized(ERROR_CODES.INVALID_CREDENTIALS, 'Credenciales invalidas');
+      throw BusinessException.unauthorized(
+        ERROR_CODES.INVALID_CREDENTIALS,
+        'Credenciales invalidas',
+      );
     }
 
     if (user.status === 'inactive') {
@@ -243,7 +244,11 @@ export class AuthService {
 
   async logoutAll(userId: string, exceptSessionId?: string): Promise<number> {
     const result = await this.prisma.session.updateMany({
-      where: { userId, revokedAt: null, ...(exceptSessionId ? { id: { not: exceptSessionId } } : {}) },
+      where: {
+        userId,
+        revokedAt: null,
+        ...(exceptSessionId ? { id: { not: exceptSessionId } } : {}),
+      },
       data: { revokedAt: new Date() },
     });
     return result.count;
@@ -265,7 +270,11 @@ export class AuthService {
     });
   }
 
-  async switchCompany(ctx: RequestContext, companyId: string, meta: RequestMeta): Promise<LoginResult> {
+  async switchCompany(
+    ctx: RequestContext,
+    companyId: string,
+    meta: RequestMeta,
+  ): Promise<LoginResult> {
     const membership = await this.prisma.companyUser.findFirst({
       where: { userId: ctx.userId, companyId, isActive: true, deletedAt: null },
       include: { company: { select: { isActive: true } } },
@@ -396,7 +405,12 @@ export class AuthService {
   /* ----------------------------- passwords ------------------------------ */
 
   static async hashPassword(password: string): Promise<string> {
-    return argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+    return argon2.hash(password, {
+      type: argon2.argon2id,
+      memoryCost: 19456,
+      timeCost: 2,
+      parallelism: 1,
+    });
   }
 
   async changePassword(ctx: RequestContext, current: string, next: string): Promise<void> {
@@ -404,7 +418,10 @@ export class AuthService {
     if (!user?.passwordHash) throw BusinessException.notFound('Usuario');
     const valid = await argon2.verify(user.passwordHash, current).catch(() => false);
     if (!valid) {
-      throw BusinessException.unauthorized(ERROR_CODES.INVALID_CREDENTIALS, 'La contrasena actual no es correcta');
+      throw BusinessException.unauthorized(
+        ERROR_CODES.INVALID_CREDENTIALS,
+        'La contrasena actual no es correcta',
+      );
     }
     await this.prisma.user.update({
       where: { id: user.id },
@@ -455,7 +472,11 @@ export class AuthService {
 
   async resetPassword(token: string, password: string): Promise<void> {
     const record = await this.prisma.passwordResetToken.findFirst({
-      where: { tokenHash: this.encryption.hash(token), usedAt: null, expiresAt: { gt: new Date() } },
+      where: {
+        tokenHash: this.encryption.hash(token),
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
     });
     if (!record) {
       throw BusinessException.validation('El enlace de restablecimiento no es valido o ya expiro');
@@ -499,7 +520,10 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({ where: { id: ctx.userId } });
     const secret = this.encryption.decrypt(user?.twoFactorSecret);
     if (!secret || !authenticator.check(code, secret)) {
-      throw BusinessException.unauthorized(ERROR_CODES.TWO_FACTOR_INVALID, 'El codigo no es valido');
+      throw BusinessException.unauthorized(
+        ERROR_CODES.TWO_FACTOR_INVALID,
+        'El codigo no es valido',
+      );
     }
     const recoveryCodes = Array.from({ length: 8 }, () => randomUUID().slice(0, 8).toUpperCase());
     await this.prisma.user.update({
@@ -524,7 +548,10 @@ export class AuthService {
       ? await argon2.verify(user.passwordHash, password).catch(() => false)
       : false;
     if (!valid) {
-      throw BusinessException.unauthorized(ERROR_CODES.INVALID_CREDENTIALS, 'Contrasena incorrecta');
+      throw BusinessException.unauthorized(
+        ERROR_CODES.INVALID_CREDENTIALS,
+        'Contrasena incorrecta',
+      );
     }
     await this.prisma.user.update({
       where: { id: ctx.userId },
@@ -534,9 +561,15 @@ export class AuthService {
 
   /* ---------------------------- impersonation --------------------------- */
 
-  async impersonate(ctx: RequestContext, targetUserId: string, meta: RequestMeta): Promise<LoginResult> {
+  async impersonate(
+    ctx: RequestContext,
+    targetUserId: string,
+    meta: RequestMeta,
+  ): Promise<LoginResult> {
     if (!ctx.isSuperadmin && !ctx.roles.includes('company_admin')) {
-      throw BusinessException.forbidden('Solo un administrador de empresa puede suplantar usuarios');
+      throw BusinessException.forbidden(
+        'Solo un administrador de empresa puede suplantar usuarios',
+      );
     }
     const target = await this.prisma.companyUser.findFirst({
       where: { companyId: ctx.companyId, userId: targetUserId, isActive: true },

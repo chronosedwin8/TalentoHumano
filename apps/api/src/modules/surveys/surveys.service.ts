@@ -173,9 +173,15 @@ export class SurveysService {
       });
     }
 
-    const departmentIds = audiences.filter((a) => a.targetType === 'department').map((a) => a.targetId!);
-    const locationIds = audiences.filter((a) => a.targetType === 'location').map((a) => a.targetId!);
-    const positionIds = audiences.filter((a) => a.targetType === 'position').map((a) => a.targetId!);
+    const departmentIds = audiences
+      .filter((a) => a.targetType === 'department')
+      .map((a) => a.targetId!);
+    const locationIds = audiences
+      .filter((a) => a.targetType === 'location')
+      .map((a) => a.targetId!);
+    const positionIds = audiences
+      .filter((a) => a.targetType === 'position')
+      .map((a) => a.targetId!);
 
     return this.prisma.employee.findMany({
       where: {
@@ -330,11 +336,16 @@ export class SurveysService {
         type: question.type,
         dimension: question.dimension,
         responses: answers.length,
-        average: numeric.length ? round(numeric.reduce((a, b) => a + b, 0) / numeric.length, 2) : null,
+        average: numeric.length
+          ? round(numeric.reduce((a, b) => a + b, 0) / numeric.length, 2)
+          : null,
         distribution,
         textAnswers:
           question.type === 'textarea' || question.type === 'text'
-            ? answers.map((answer) => answer.textValue).filter(Boolean).slice(0, 200)
+            ? answers
+                .map((answer) => answer.textValue)
+                .filter(Boolean)
+                .slice(0, 200)
             : undefined,
       };
     });
@@ -360,7 +371,12 @@ export class SurveysService {
       ? round((likert.reduce((acc, q) => acc + (q.average ?? 0), 0) / likert.length / 5) * 100, 1)
       : null;
 
-    let segments: Array<{ segment: string; responses: number; average: number | null; hidden: boolean }> = [];
+    let segments: Array<{
+      segment: string;
+      responses: number;
+      average: number | null;
+      hidden: boolean;
+    }> = [];
     if (segmentBy) {
       const grouped = new Map<string, typeof responses>();
       for (const response of responses) {
@@ -414,10 +430,59 @@ export class SurveysService {
     });
 
     const stopWords = new Set([
-      'de','la','que','el','en','y','a','los','se','del','las','un','por','con','no','una','su','para',
-      'es','al','lo','como','mas','pero','sus','le','ya','o','este','si','porque','esta','entre','cuando',
-      'muy','sin','sobre','tambien','me','hasta','hay','donde','quien','desde','todo','nos','durante','mi',
-      'the','and','of','to','in',
+      'de',
+      'la',
+      'que',
+      'el',
+      'en',
+      'y',
+      'a',
+      'los',
+      'se',
+      'del',
+      'las',
+      'un',
+      'por',
+      'con',
+      'no',
+      'una',
+      'su',
+      'para',
+      'es',
+      'al',
+      'lo',
+      'como',
+      'mas',
+      'pero',
+      'sus',
+      'le',
+      'ya',
+      'o',
+      'este',
+      'si',
+      'porque',
+      'esta',
+      'entre',
+      'cuando',
+      'muy',
+      'sin',
+      'sobre',
+      'tambien',
+      'me',
+      'hasta',
+      'hay',
+      'donde',
+      'quien',
+      'desde',
+      'todo',
+      'nos',
+      'durante',
+      'mi',
+      'the',
+      'and',
+      'of',
+      'to',
+      'in',
     ]);
     const counts = new Map<string, number>();
     for (const answer of answers) {

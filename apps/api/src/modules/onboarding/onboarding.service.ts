@@ -29,8 +29,14 @@ export class OnboardingService {
     private readonly events: EventEmitter2,
   ) {}
 
-  /** Starts onboarding automatically when a candidate is hired. */
-  @OnEvent(DOMAIN_EVENTS.EMPLOYEE_HIRED, { async: true })
+  /**
+   * Starts onboarding automatically when a candidate is hired.
+   *
+   * Without `async: true` the emitter awaits this listener, so the hiring
+   * response already reflects the process: the recruiter lands on the new
+   * employee and sees the onboarding tasks, not an empty screen.
+   */
+  @OnEvent(DOMAIN_EVENTS.EMPLOYEE_HIRED)
   async onEmployeeHired(event: HiredEvent): Promise<void> {
     try {
       await this.startProcess(
@@ -44,7 +50,7 @@ export class OnboardingService {
         null,
       );
     } catch (error) {
-      this.logger.error(`No se pudo iniciar el onboarding: ${(error as Error).message}`);
+      this.logger.error(`Could not start onboarding: ${(error as Error).message}`);
     }
   }
 
@@ -156,7 +162,9 @@ export class OnboardingService {
         companyId,
         userIds: [employee.userId],
         eventKey:
-          input.kind === 'onboarding' ? DOMAIN_EVENTS.ONBOARDING_STARTED : DOMAIN_EVENTS.OFFBOARDING_STARTED,
+          input.kind === 'onboarding'
+            ? DOMAIN_EVENTS.ONBOARDING_STARTED
+            : DOMAIN_EVENTS.OFFBOARDING_STARTED,
         title:
           input.kind === 'onboarding'
             ? 'Su proceso de ingreso esta listo'
@@ -169,7 +177,9 @@ export class OnboardingService {
     }
 
     await this.events.emitAsync(
-      input.kind === 'onboarding' ? DOMAIN_EVENTS.ONBOARDING_STARTED : DOMAIN_EVENTS.OFFBOARDING_STARTED,
+      input.kind === 'onboarding'
+        ? DOMAIN_EVENTS.ONBOARDING_STARTED
+        : DOMAIN_EVENTS.OFFBOARDING_STARTED,
       { companyId, processId: process.id, employeeId: employee.id },
     );
 
@@ -188,11 +198,7 @@ export class OnboardingService {
     return null;
   }
 
-  async completeTask(
-    ctx: RequestContext,
-    taskId: string,
-    result: Record<string, unknown> = {},
-  ) {
+  async completeTask(ctx: RequestContext, taskId: string, result: Record<string, unknown> = {}) {
     const task = await this.prisma.onboardingTask.findFirst({
       where: { id: taskId, companyId: ctx.companyId },
       include: { process: true },

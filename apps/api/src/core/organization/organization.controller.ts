@@ -1,12 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import {
-  departmentSchema,
-  locationSchema,
-  MODULES,
-  positionSchema,
-  uuid,
-} from '@talento/shared';
+import { departmentSchema, locationSchema, MODULES, positionSchema, uuid } from '@talento/shared';
 import { z } from 'zod';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import { Audit, Ctx, RequireModule, RequirePermission } from '../../common/decorators';
@@ -76,7 +70,10 @@ export class OrganizationController {
   @RequirePermission('settings.location.delete')
   @Audit({ entityType: 'location', action: 'delete' })
   @ApiOperation({ summary: 'Elimina logicamente una sede' })
-  async removeLocation(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeLocation(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).location, id, ctx.userId);
   }
 
@@ -85,7 +82,10 @@ export class OrganizationController {
   @Get('departments')
   @RequirePermission('settings.department.read')
   @ApiOperation({ summary: 'Areas de la empresa' })
-  async departments(@Ctx() ctx: RequestContext, @Query('includeInactive') includeInactive?: string) {
+  async departments(
+    @Ctx() ctx: RequestContext,
+    @Query('includeInactive') includeInactive?: string,
+  ) {
     return this.organization.listDepartments(ctx, includeInactive === 'true');
   }
 
@@ -138,7 +138,10 @@ export class OrganizationController {
   @RequirePermission('settings.department.delete')
   @Audit({ entityType: 'department', action: 'delete' })
   @ApiOperation({ summary: 'Elimina logicamente un area' })
-  async removeDepartment(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeDepartment(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).department, id, ctx.userId);
   }
 
@@ -221,7 +224,10 @@ export class OrganizationController {
   @RequirePermission('settings.position.delete')
   @Audit({ entityType: 'position', action: 'delete' })
   @ApiOperation({ summary: 'Elimina logicamente un cargo' })
-  async removePosition(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removePosition(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).position, id, ctx.userId);
   }
 
@@ -301,7 +307,10 @@ export class OrganizationController {
   @RequirePermission('settings.costcenter.delete')
   @Audit({ entityType: 'cost_center', action: 'delete' })
   @ApiOperation({ summary: 'Elimina logicamente un centro de costo' })
-  async removeCostCenter(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeCostCenter(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).costCenter, id, ctx.userId);
   }
 
@@ -320,7 +329,14 @@ export class OrganizationController {
   @ApiOperation({ summary: 'Directorio de colaboradores' })
   async directory(
     @Ctx() ctx: RequestContext,
-    @Query() query: { search?: string; departmentId?: string; locationId?: string; page?: string; limit?: string },
+    @Query()
+    query: {
+      search?: string;
+      departmentId?: string;
+      locationId?: string;
+      page?: string;
+      limit?: string;
+    },
   ) {
     const { page, limit } = parsePage(query);
     const { rows, total } = await this.organization.directory(ctx, {

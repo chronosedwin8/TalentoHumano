@@ -27,9 +27,12 @@ export class CommunicationService {
     const targets: Array<{ targetType: string; targetId: string | null }> = [
       { targetType: 'all', targetId: null },
     ];
-    if (employee?.locationId) targets.push({ targetType: 'location', targetId: employee.locationId });
-    if (employee?.departmentId) targets.push({ targetType: 'department', targetId: employee.departmentId });
-    if (employee?.positionId) targets.push({ targetType: 'position', targetId: employee.positionId });
+    if (employee?.locationId)
+      targets.push({ targetType: 'location', targetId: employee.locationId });
+    if (employee?.departmentId)
+      targets.push({ targetType: 'department', targetId: employee.departmentId });
+    if (employee?.positionId)
+      targets.push({ targetType: 'position', targetId: employee.positionId });
 
     return targets;
   }
@@ -167,9 +170,15 @@ export class CommunicationService {
       return all.map((employee) => employee.id);
     }
 
-    const locationIds = audiences.filter((a) => a.targetType === 'location').map((a) => a.targetId!);
-    const departmentIds = audiences.filter((a) => a.targetType === 'department').map((a) => a.targetId!);
-    const positionIds = audiences.filter((a) => a.targetType === 'position').map((a) => a.targetId!);
+    const locationIds = audiences
+      .filter((a) => a.targetType === 'location')
+      .map((a) => a.targetId!);
+    const departmentIds = audiences
+      .filter((a) => a.targetType === 'department')
+      .map((a) => a.targetId!);
+    const positionIds = audiences
+      .filter((a) => a.targetType === 'position')
+      .map((a) => a.targetId!);
 
     const employees = await this.prisma.employee.findMany({
       where: {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { isoDate, MODULES, round, uuid } from '@talento/shared';
 import { z } from 'zod';
@@ -13,7 +13,7 @@ import {
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged, softDelete } from '../../common/utils/crud';
+import { defined, listPaged } from '../../common/utils/crud';
 import { paged, parsePage } from '../../common/utils/pagination';
 
 const examSchema = z.object({
@@ -271,7 +271,8 @@ export class SstController {
     @Body(new ZodValidationPipe(riskSchema)) dto: z.infer<typeof riskSchema>,
   ) {
     const score = dto.probability * dto.consequence;
-    const riskLevel = score >= 20 ? 'critico' : score >= 12 ? 'alto' : score >= 6 ? 'medio' : 'bajo';
+    const riskLevel =
+      score >= 20 ? 'critico' : score >= 12 ? 'alto' : score >= 6 ? 'medio' : 'bajo';
     return this.prisma.forCompany(ctx.companyId).riskMatrixEntry.create({
       data: { ...dto, riskLevel } as never,
     });
@@ -482,7 +483,7 @@ export class SstController {
       incidents: accidents.filter((a) => a.kind === 'incident').length,
       occupationalDiseases: accidents.filter((a) => a.kind === 'occupational_disease').length,
       lostDays,
-      // Resolucion 0312: frecuencia, severidad y ausentismo por causa medica.
+      // Resolucion 0312 de 2019: frequency, severity and medical absenteeism.
       frequencyRate: headcount ? round((accidentCount / headcount) * 100, 2) : 0,
       severityRate: headcount ? round((lostDays / headcount) * 100, 2) : 0,
       medicalAbsenteeismRate: workDays ? round((medicalDays / workDays) * 100, 2) : 0,

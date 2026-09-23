@@ -2,9 +2,7 @@ import { z } from 'zod';
 import { PAGINATION } from './constants.js';
 
 export const uuid = z.string().uuid('Identificador invalido');
-export const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha invalida (AAAA-MM-DD)');
+export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha invalida (AAAA-MM-DD)');
 export const isoDateTime = z.string().datetime({ offset: true }).or(z.string().datetime());
 
 export const passwordSchema = z
@@ -23,7 +21,10 @@ export const loginSchema = z.object({
   email: emailSchema,
   password: z.string().min(1, 'Ingrese su contrasena'),
   companyId: uuid.optional(),
-  twoFactorCode: z.string().regex(/^\d{6}$/).optional(),
+  twoFactorCode: z
+    .string()
+    .regex(/^\d{6}$/)
+    .optional(),
   rememberMe: z.boolean().optional(),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -96,7 +97,13 @@ export const positionSchema = z.object({
 /* ----------------------------- people ------------------------------ */
 
 export const genderEnum = z.enum(['male', 'female', 'other', 'undisclosed']);
-export const employeeStatusEnum = z.enum(['active', 'inactive', 'on_leave', 'pre_hire', 'suspended']);
+export const employeeStatusEnum = z.enum([
+  'active',
+  'inactive',
+  'on_leave',
+  'pre_hire',
+  'suspended',
+]);
 
 export const employeeCreateSchema = z.object({
   employeeCode: z.string().trim().max(40).optional().nullable(),
@@ -127,7 +134,9 @@ export const employeeCreateSchema = z.object({
 });
 export type EmployeeCreateInput = z.infer<typeof employeeCreateSchema>;
 
-export const employeeUpdateSchema = employeeCreateSchema.partial().omit({ createUserAccount: true });
+export const employeeUpdateSchema = employeeCreateSchema
+  .partial()
+  .omit({ createUserAccount: true });
 
 export const employmentContractSchema = z.object({
   employeeId: uuid,
@@ -162,7 +171,10 @@ export const employeeMovementSchema = z.object({
 export const leaveTypeSchema = z.object({
   name: z.string().trim().min(2).max(120),
   code: z.string().trim().min(2).max(40),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#2563eb'),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default('#2563eb'),
   requiresApproval: z.boolean().default(true),
   requiresAttachment: z.boolean().default(false),
   affectsBalance: z.boolean().default(false),
@@ -331,7 +343,13 @@ export const scorecardSchema = z.object({
   concerns: z.string().trim().max(4000).optional().nullable(),
   notes: z.string().trim().max(8000).optional().nullable(),
   ratings: z
-    .array(z.object({ competencyId: uuid, rating: z.number().int().min(1).max(5), comment: z.string().max(2000).optional().nullable() }))
+    .array(
+      z.object({
+        competencyId: uuid,
+        rating: z.number().int().min(1).max(5),
+        comment: z.string().max(2000).optional().nullable(),
+      }),
+    )
     .default([]),
 });
 
@@ -432,7 +450,9 @@ export const ethicsReportSchema = z.object({
   reporterName: z.string().trim().max(160).optional().nullable(),
   reporterEmail: emailSchema.optional().nullable(),
   reporterPhone: z.string().trim().max(40).optional().nullable(),
-  relationship: z.enum(['employee', 'client', 'supplier', 'contractor', 'other']).default('employee'),
+  relationship: z
+    .enum(['employee', 'client', 'supplier', 'contractor', 'other'])
+    .default('employee'),
   subject: z.string().trim().min(5).max(200),
   description: z.string().trim().min(20).max(20000),
   occurredAt: isoDate.optional().nullable(),

@@ -4,7 +4,9 @@ const bool = (def: boolean) =>
   z
     .union([z.boolean(), z.string()])
     .default(def)
-    .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase())));
+    .transform((v) =>
+      typeof v === 'boolean' ? v : ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()),
+    );
 
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -30,6 +32,13 @@ export const envSchema = z.object({
   LOCKOUT_MINUTES: z.coerce.number().int().default(15),
   THROTTLE_TTL: z.coerce.number().int().default(60),
   THROTTLE_LIMIT: z.coerce.number().int().default(300),
+  /**
+   * Per minute, per IP limits for signing in and rotating a session.
+   * Brute force is stopped per account; these limits only smooth out traffic,
+   * and a whole office shares one public address, so they must be tunable.
+   */
+  AUTH_LOGIN_LIMIT: z.coerce.number().int().default(60),
+  AUTH_REFRESH_LIMIT: z.coerce.number().int().default(120),
 
   REDIS_ENABLED: bool(false),
   REDIS_URL: z.string().default('redis://localhost:6379'),

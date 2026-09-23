@@ -114,7 +114,8 @@ export class WorkflowsController {
   async delegate(
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
-    @Body(new ZodValidationPipe(workflowDelegateSchema)) dto: { toUserId: string; comment?: string | null },
+    @Body(new ZodValidationPipe(workflowDelegateSchema))
+    dto: { toUserId: string; comment?: string | null },
   ) {
     return this.workflows.delegate(ctx, id, dto.toUserId, dto.comment);
   }
@@ -197,12 +198,10 @@ export class WorkflowsController {
   @Audit({ entityType: 'workflow_definition', action: 'delete' })
   @ApiOperation({ summary: 'Desactiva un flujo de aprobacion' })
   async archive(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
-    await this.prisma
-      .forCompany(ctx.companyId)
-      .workflowDefinition.updateMany({
-        where: { id },
-        data: { isActive: false, deletedAt: new Date() },
-      });
+    await this.prisma.forCompany(ctx.companyId).workflowDefinition.updateMany({
+      where: { id },
+      data: { isActive: false, deletedAt: new Date() },
+    });
     return { id };
   }
 }

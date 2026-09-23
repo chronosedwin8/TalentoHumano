@@ -117,17 +117,18 @@ async function main(): Promise<void> {
   const employees = await createEmployees(companyId, { locations, departments, positions, costCenters });
   console.log(`  ${employees.length} colaboradores creados`);
 
-  await createDemoUsers(companyId, employees);
+  const { demoEmployeeId } = await createDemoUsers(companyId, employees);
+  await createApprovalFlows(companyId);
   await createDocuments(companyId, employees);
   await createAssets(companyId, employees, locations);
   await createSchedulesAndAttendance(companyId, employees);
-  await createLeaves(companyId, employees);
+  await createLeaves(companyId, employees, demoEmployeeId);
   await createRecruiting(companyId, { departments, positions, locations, employees, competencies });
   await createOnboarding(companyId, employees);
   await createLearning(companyId, employees, positions);
   await createPerformance(companyId, employees, competencies);
   await createCommunication(companyId, employees, values);
-  await createSurveys(companyId, employees, departments);
+  await createSurveys(companyId, employees, departments, demoEmployeeId);
   await createEthics(companyId);
   await createHelpdesk(companyId, employees);
   await createSst(companyId, employees, locations, positions);
@@ -451,6 +452,7 @@ async function createEmployees(companyId: string, refs: OrgRefs) {
     level: string | null;
     hiredAt: Date;
     status: string;
+    managerId: string | null;
   }> = [];
 
   const positionByName = new Map(refs.positions.map((p) => [p.name, p]));
@@ -606,6 +608,7 @@ async function createEmployees(companyId: string, refs: OrgRefs) {
       level: position.level,
       hiredAt: params.hiredAt,
       status: employee.status,
+      managerId: employee.managerId,
     });
 
     return employee.id;
@@ -691,13 +694,108 @@ async function createEmployees(companyId: string, refs: OrgRefs) {
   return employees;
 }
 
+/**
+ * Flujos de aprobacion de la empresa de demostracion.
+ *
+ * Sin una definicion configurada el motor aprueba las solicitudes de inmediato,
+ * que es lo correcto para una instalacion nueva pero deja la bandeja del jefe
+ * siempre vacia. La demo si los configura, para que se pueda recorrer el
+ * circuito completo: solicitar, aprobar y ver el efecto.
+ */
+async function createApprovalFlows(companyId: string) {
+  const flows = [
+    {
+      key: 'ausencias',
+      name: 'Aprobacion de ausencias',
+      entityType: 'leave_request',
+      description: 'El jefe directo aprueba; talento humano entra cuando supera diez dias.',
+      steps: [
+        { name: 'Jefe directo', approverType: 'direct_manager' as const, condition: {}, slaHours: 48 },
+        {
+          name: 'Talento humano',
+          approverType: 'hr' as const,
+          // Solo escala en ausencias largas.
+          condition: { field: 'days', op: 'gt', value: 10 },
+          slaHours: 72,
+        },
+      ],
+    },
+    {
+      key: 'requisiciones',
+      name: 'Aprobacion de requisiciones de personal',
+      entityType: 'job_requisition',
+      description: 'Jefe del area y luego talento humano.',
+      steps: [
+        { name: 'Jefe del area', approverType: 'department_manager' as const, condition: {}, slaHours: 72 },
+        { name: 'Talento humano', approverType: 'hr' as const, condition: {}, slaHours: 72 },
+      ],
+    },
+  ];
+
+  for (const flow of flows) {
+    const definition = await prisma.workflowDefinition.create({
+      data: {
+        companyId,
+        key: flow.key,
+        name: flow.name,
+        entityType: flow.entityType,
+        description: flow.description,
+        mode: 'sequential',
+        isActive: true,
+      },
+    });
+
+    for (const [index, step] of flow.steps.entries()) {
+      await prisma.workflowStep.create({
+        data: {
+          companyId,
+          definitionId: definition.id,
+          position: index,
+          name: step.name,
+          approverType: step.approverType,
+          condition: step.condition as Prisma.InputJsonValue,
+          slaHours: step.slaHours,
+        },
+      });
+    }
+  }
+
+  console.log(`  ${flows.length} flujos de aprobacion configurados`);
+}
+
 async function createDemoUsers(
   companyId: string,
-  employees: Array<{ id: string; fullName: string; email: string; level: string | null; departmentId: string | null }>,
-) {
-  const hrDirector = employees.find((e) => e.level === 'Directivo');
-  const manager = employees.find((e) => e.level === 'Coordinacion');
-  const employee = employees.find((e) => e.level === 'Junior' || e.level === 'Auxiliar');
+  employees: Array<{
+    id: string;
+    fullName: string;
+    email: string;
+    level: string | null;
+    departmentId: string | null;
+    managerId: string | null;
+    status: string;
+  }>,
+): Promise<{ demoEmployeeId: string | null }> {
+  // Las cuentas de demostracion tienen que apuntar a gente activa: un
+  // colaborador retirado no recibe encuestas, no acumula vacaciones y deja la
+  // demo con pantallas vacias.
+  const isActive = (e: { status?: string }) => e.status === undefined || e.status === 'active';
+
+  const hrDirector = employees.find((e) => e.level === 'Directivo' && isActive(e));
+  const manager = employees.find((e) => e.level === 'Coordinacion' && isActive(e));
+
+  // Quien explora la demo espera que `manager@demo.com` sea el jefe de
+  // `empleado@demo.com`: asi la bandeja de aprobaciones de la cuenta de jefe
+  // muestra las solicitudes de la cuenta de colaborador. Se prefiere alguien
+  // que ya reporte a ese jefe; si no hay, se reasigna.
+  const isJunior = (e: { level: string | null }) => e.level === 'Junior' || e.level === 'Auxiliar';
+  const employee =
+    employees.find((e) => isJunior(e) && isActive(e) && e.managerId === manager?.id) ??
+    employees.find((e) => isJunior(e) && isActive(e));
+
+  if (employee && manager && employee.managerId !== manager.id) {
+    await prisma.employee.update({ where: { id: employee.id }, data: { managerId: manager.id } });
+    employee.managerId = manager.id;
+  }
 
   const accounts: Array<{
     email: string;
@@ -743,6 +841,8 @@ async function createDemoUsers(
     });
   }
 
+  const demoEmployeeId = employee?.id ?? null;
+
   // Every remaining collaborator gets a portal account too.
   const employeeRole = await prisma.role.findFirst({ where: { companyId, key: 'employee' } });
   const managerRole = await prisma.role.findFirst({ where: { companyId, key: 'manager' } });
@@ -775,6 +875,8 @@ async function createDemoUsers(
     }
     await prisma.employee.update({ where: { id: row.id }, data: { userId: user.id } });
   }
+
+  return { demoEmployeeId };
 }
 
 async function createDocuments(companyId: string, employees: Array<{ id: string; hiredAt: Date }>) {
@@ -1066,6 +1168,12 @@ async function createSchedulesAndAttendance(
 async function createLeaves(
   companyId: string,
   employees: Array<{ id: string; hiredAt: Date; status: string }>,
+  /**
+   * La cuenta `empleado@demo.com` recibe menos ausencias pasadas, para que le
+   * quede saldo suficiente y quien explora la demo pueda solicitar vacaciones
+   * y recorrer el circuito de aprobacion sin quedarse sin dias.
+   */
+  demoEmployeeId: string | null = null,
 ) {
   const types = await prisma.leaveType.findMany({ where: { companyId } });
   const vacation = types.find((type) => type.code === 'vacaciones')!;
@@ -1081,9 +1189,15 @@ async function createLeaves(
 
   for (const employee of active) {
     // Past and upcoming absences.
-    const total = int(1, 4);
+    const total = employee.id === demoEmployeeId ? 1 : int(1, 4);
     for (let i = 0; i < total; i += 1) {
-      const type = chance(0.55) ? vacation : pick(types);
+      // Al colaborador de demostracion no se le consumen vacaciones.
+      const type =
+        employee.id === demoEmployeeId
+          ? (types.find((t) => t.code !== 'vacaciones') ?? vacation)
+          : chance(0.55)
+            ? vacation
+            : pick(types);
       const start = fromDateKey(toDateKey(addDays(new Date(), int(-240, 60))));
       const length = type.code === 'vacaciones' ? int(3, 10) : int(1, 4);
       const end = addDays(start, length - 1);
@@ -2677,6 +2791,12 @@ async function createSurveys(
   companyId: string,
   employees: Array<{ id: string; status: string; departmentId: string | null; locationId: string | null; hiredAt: Date }>,
   departments: Array<{ id: string; name: string }>,
+  /**
+   * La cuenta `empleado@demo.com` siempre queda con una encuesta por
+   * responder: quien explora la demo espera encontrar algo que hacer, y el
+   * flujo de respuesta se puede recorrer sin preparar datos a mano.
+   */
+  demoEmployeeId: string | null = null,
 ) {
   const active = employees.filter((employee) => employee.status === 'active');
   const templates = await prisma.surveyTemplate.findMany({ where: { companyId: null } });
@@ -2752,7 +2872,7 @@ async function createSurveys(
         },
       });
 
-      if (!chance(definition.response)) continue;
+      if (employee.id === demoEmployeeId || !chance(definition.response)) continue;
 
       const response = await prisma.surveyResponse.create({
         data: {

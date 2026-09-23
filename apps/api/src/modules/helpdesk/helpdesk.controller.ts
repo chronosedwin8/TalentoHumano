@@ -1,13 +1,20 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { blockDocumentSchema, MODULES, slugify, ticketMessageSchema, ticketSchema, uuid } from '@talento/shared';
+import {
+  blockDocumentSchema,
+  MODULES,
+  slugify,
+  ticketMessageSchema,
+  ticketSchema,
+  uuid,
+} from '@talento/shared';
 import { z } from 'zod';
 import { Audit, Ctx, RequireModule, RequirePermission } from '../../common/decorators';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged, softDelete } from '../../common/utils/crud';
+import { defined, listPaged } from '../../common/utils/crud';
 import { ScopeService } from '../../core/access/scope.service';
 import { HelpdeskService } from './helpdesk.service';
 
@@ -107,7 +114,8 @@ export class HelpdeskController {
     });
     if (!ticket) throw BusinessException.notFound('Ticket');
 
-    const isOwn = ticket.requesterUserId === ctx.userId || ticket.assigneeEmployeeId === ctx.employeeId;
+    const isOwn =
+      ticket.requesterUserId === ctx.userId || ticket.assigneeEmployeeId === ctx.employeeId;
     const canSeeAll = this.scope.scopeFor(ctx, 'helpdesk.ticket.read') === 'company';
     if (!isOwn && !canSeeAll) throw BusinessException.outOfScope();
 
@@ -189,7 +197,11 @@ export class HelpdeskController {
   async close(
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
-    @Body(new ZodValidationPipe(z.object({ resolutionNote: z.string().max(8000).nullable().optional() })))
+    @Body(
+      new ZodValidationPipe(
+        z.object({ resolutionNote: z.string().max(8000).nullable().optional() }),
+      ),
+    )
     dto: { resolutionNote?: string | null },
   ) {
     return this.helpdesk.closeTicket(ctx, id, dto.resolutionNote);

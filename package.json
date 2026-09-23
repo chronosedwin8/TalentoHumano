@@ -5,7 +5,9 @@
   "description": "TALENTO - Plataforma de Gestion de Recursos Humanos (HRIS + ATS + LMS + Portal del Empleado)",
   "author": "Edwin Ortiz Herazo",
   "license": "UNLICENSED",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "packageManager": "pnpm@9.15.9",
   "scripts": {
     "build": "pnpm -r build",
@@ -22,11 +24,33 @@
     "db:studio": "pnpm --filter @talento/api prisma:studio",
     "seed": "pnpm --filter @talento/api seed",
     "seed:demo": "pnpm --filter @talento/api seed:demo",
-    "prepare": "husky || true"
+    "prepare": "husky",
+    "test:cov": "pnpm --filter @talento/shared test:cov && pnpm --filter @talento/api test:cov",
+    "test:browser": "pnpm --filter @talento/web test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,md,yml}\""
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.1",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2"
+  },
+  "lint-staged": {
+    "apps/api/src/**/*.ts": [
+      "pnpm --filter @talento/api exec eslint --max-warnings 0 --fix",
+      "pnpm exec prettier --write"
+    ],
+    "apps/web/src/**/*.{ts,tsx}": [
+      "pnpm --filter @talento/web exec eslint --max-warnings 0 --fix",
+      "pnpm exec prettier --write"
+    ],
+    "packages/shared/src/**/*.ts": [
+      "pnpm exec prettier --write"
+    ],
+    "**/*.{json,md,yml}": [
+      "pnpm exec prettier --write"
+    ]
   }
 }

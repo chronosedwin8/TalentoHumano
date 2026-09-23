@@ -43,7 +43,10 @@ export class AuditInterceptor implements NestInterceptor {
         if (!ctx) return;
 
         if (sensitiveEntity) {
-          const permissions = this.reflector.get<string[]>('talento:permissions', context.getHandler());
+          const permissions = this.reflector.get<string[]>(
+            'talento:permissions',
+            context.getHandler(),
+          );
           void this.audit.recordSensitiveAccess(
             ctx,
             permissions?.[0] ?? 'sensitive.read',

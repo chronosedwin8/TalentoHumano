@@ -114,7 +114,11 @@ export class OrganizationService {
   }
 
   /** Prevents cycles when reparenting a department. */
-  async assertNoDepartmentCycle(companyId: string, id: string, parentId: string | null | undefined) {
+  async assertNoDepartmentCycle(
+    companyId: string,
+    id: string,
+    parentId: string | null | undefined,
+  ) {
     if (!parentId) return;
     if (parentId === id) throw BusinessException.validation('Un area no puede ser su propio padre');
     const departments = await this.prisma.department.findMany({
@@ -125,7 +129,8 @@ export class OrganizationService {
     let cursor: string | null | undefined = parentId;
     const seen = new Set<string>();
     while (cursor) {
-      if (cursor === id) throw BusinessException.validation('La jerarquia de areas quedaria ciclica');
+      if (cursor === id)
+        throw BusinessException.validation('La jerarquia de areas quedaria ciclica');
       if (seen.has(cursor)) break;
       seen.add(cursor);
       cursor = byId.get(cursor) ?? null;
@@ -210,7 +215,13 @@ export class OrganizationService {
   /** Flat employee directory with the visibility flag applied. */
   async directory(
     ctx: RequestContext,
-    params: { search?: string; departmentId?: string; locationId?: string; page: number; limit: number },
+    params: {
+      search?: string;
+      departmentId?: string;
+      locationId?: string;
+      page: number;
+      limit: number;
+    },
   ) {
     const where: Prisma.EmployeeWhereInput = {
       companyId: ctx.companyId,

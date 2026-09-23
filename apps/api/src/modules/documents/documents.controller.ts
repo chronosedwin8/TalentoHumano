@@ -115,7 +115,10 @@ export class DocumentsController {
   @RequirePermission('documents.template.delete')
   @Audit({ entityType: 'document_template', action: 'delete' })
   @ApiOperation({ summary: 'Elimina una plantilla' })
-  async removeTemplate(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeTemplate(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).documentTemplate, id, ctx.userId);
   }
 
@@ -147,7 +150,11 @@ export class DocumentsController {
   @ApiOperation({ summary: 'Genera un documento para varios colaboradores' })
   async generateBulk(
     @Ctx() ctx: RequestContext,
-    @Body(new ZodValidationPipe(z.object({ templateId: uuid, employeeIds: z.array(uuid).min(1).max(500) })))
+    @Body(
+      new ZodValidationPipe(
+        z.object({ templateId: uuid, employeeIds: z.array(uuid).min(1).max(500) }),
+      ),
+    )
     dto: { templateId: string; employeeIds: string[] },
   ) {
     const results = [];
@@ -170,13 +177,24 @@ export class DocumentsController {
     @Body(new ZodValidationPipe(z.object({ templateId: uuid.optional() })))
     dto: { templateId?: string },
   ) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     const template = dto.templateId
       ? await this.prisma.documentTemplate.findFirst({
-          where: { id: dto.templateId, companyId: ctx.companyId, isSelfService: true, deletedAt: null },
+          where: {
+            id: dto.templateId,
+            companyId: ctx.companyId,
+            isSelfService: true,
+            deletedAt: null,
+          },
         })
       : await this.prisma.documentTemplate.findFirst({
-          where: { companyId: ctx.companyId, isSelfService: true, kind: 'certificate', deletedAt: null },
+          where: {
+            companyId: ctx.companyId,
+            isSelfService: true,
+            kind: 'certificate',
+            deletedAt: null,
+          },
         });
     if (!template) {
       throw BusinessException.notFound('Plantilla de certificado habilitada para autoservicio');
@@ -212,7 +230,10 @@ export class DocumentsController {
   @Get('generated/:id')
   @RequirePermission('documents.generated.read')
   @ApiOperation({ summary: 'Contenido HTML listo para imprimir o convertir a PDF' })
-  async generatedOne(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async generatedOne(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     const document = await this.prisma.generatedDocument.findFirst({
       where: { id, companyId: ctx.companyId },
     });

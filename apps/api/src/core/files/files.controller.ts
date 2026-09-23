@@ -1,15 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  Put,
-  Query,
-  Req,
-  Res,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { presignUploadSchema, uuid } from '@talento/shared';
 import type { Request, Response } from 'express';
@@ -43,7 +32,8 @@ export class FilesController {
   async confirm(
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
-    @Body(new ZodValidationPipe(z.object({ checksum: z.string().optional() }))) dto: { checksum?: string },
+    @Body(new ZodValidationPipe(z.object({ checksum: z.string().optional() })))
+    dto: { checksum?: string },
   ) {
     const file = await this.files.confirmUpload(ctx, id, dto.checksum);
     return this.files.present(file);

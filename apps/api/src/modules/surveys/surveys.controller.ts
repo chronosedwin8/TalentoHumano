@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { MODULES, surveyResponseSchema, uuid } from '@talento/shared';
 import { z } from 'zod';
@@ -31,7 +31,9 @@ const fieldSchema = z.object({
   label: z.string().min(1).max(1000),
   description: z.string().max(1000).optional(),
   required: z.boolean().optional(),
-  options: z.array(z.object({ value: z.string(), label: z.string(), score: z.number().optional() })).optional(),
+  options: z
+    .array(z.object({ value: z.string(), label: z.string(), score: z.number().optional() }))
+    .optional(),
   rows: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   min: z.number().optional(),
   max: z.number().optional(),
@@ -51,7 +53,9 @@ const fieldSchema = z.object({
 const surveySchema = z.object({
   title: z.string().trim().min(2).max(260),
   description: z.string().max(4000).nullable().optional(),
-  kind: z.enum(['climate', 'enps', 'pulse', 'onboarding', 'exit', 'course', 'custom']).default('climate'),
+  kind: z
+    .enum(['climate', 'enps', 'pulse', 'onboarding', 'exit', 'course', 'custom'])
+    .default('climate'),
   isAnonymous: z.boolean().default(true),
   minSegmentResponses: z.number().int().min(1).max(100).default(5),
   opensAt: z.string().nullable().optional(),
@@ -116,7 +120,14 @@ export class SurveysController {
       },
       include: {
         survey: {
-          select: { id: true, title: true, description: true, kind: true, closesAt: true, isAnonymous: true },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            kind: true,
+            closesAt: true,
+            isAnonymous: true,
+          },
         },
       },
     });

@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { uuid } from '@talento/shared';
 import { z } from 'zod';
 import { Audit, Ctx, RequirePermission } from '../../common/decorators';
 import { BusinessException } from '../../common/exceptions/business.exception';
@@ -34,7 +33,9 @@ const fieldSchema: z.ZodType<any> = z.object({
   description: z.string().max(1000).optional(),
   placeholder: z.string().max(200).optional(),
   required: z.boolean().optional(),
-  options: z.array(z.object({ value: z.string(), label: z.string(), score: z.number().optional() })).optional(),
+  options: z
+    .array(z.object({ value: z.string(), label: z.string(), score: z.number().optional() }))
+    .optional(),
   rows: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   min: z.number().optional(),
   max: z.number().optional(),
@@ -62,7 +63,15 @@ const formSchemaShape = z.object({
 const upsertFormSchema = z.object({
   key: z.string().trim().min(2).max(80),
   name: z.string().trim().min(2).max(200),
-  purpose: z.enum(['survey', 'review', 'checklist', 'application', 'inspection', 'exit', 'generic']),
+  purpose: z.enum([
+    'survey',
+    'review',
+    'checklist',
+    'application',
+    'inspection',
+    'exit',
+    'generic',
+  ]),
   description: z.string().max(500).nullable().optional(),
   schema: formSchemaShape,
   publish: z.boolean().default(true),
@@ -83,7 +92,10 @@ export class FormsController {
   @Get()
   @RequirePermission('settings.form.manage')
   @ApiOperation({ summary: 'Formularios dinamicos configurados' })
-  async list(@Ctx() ctx: RequestContext, @Query() query: { page?: string; limit?: string; purpose?: string }) {
+  async list(
+    @Ctx() ctx: RequestContext,
+    @Query() query: { page?: string; limit?: string; purpose?: string },
+  ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).dynamicForm, query, {
       where: { deletedAt: null, ...(query.purpose ? { purpose: query.purpose } : {}) },
       include: { versions: { orderBy: { version: 'desc' }, take: 1 } },
@@ -97,7 +109,9 @@ export class FormsController {
   async findByKey(@Ctx() ctx: RequestContext, @Param('key') key: string) {
     const form = await this.prisma.forCompany(ctx.companyId).dynamicForm.findFirst({
       where: { key, deletedAt: null },
-      include: { versions: { where: { isPublished: true }, orderBy: { version: 'desc' }, take: 1 } },
+      include: {
+        versions: { where: { isPublished: true }, orderBy: { version: 'desc' }, take: 1 },
+      },
     });
     if (!form) throw BusinessException.notFound('Formulario');
     return { ...form, currentVersion: form.versions[0] ?? null };
@@ -121,7 +135,12 @@ export class FormsController {
         description: dto.description ?? null,
         createdById: ctx.userId,
       },
-      update: { name: dto.name, purpose: dto.purpose, description: dto.description ?? null, deletedAt: null },
+      update: {
+        name: dto.name,
+        purpose: dto.purpose,
+        description: dto.description ?? null,
+        deletedAt: null,
+      },
     });
 
     const last = await db.formVersion.findFirst({
@@ -159,7 +178,9 @@ export class FormsController {
     const db = this.prisma.forCompany(ctx.companyId);
     const form = await db.dynamicForm.findFirst({
       where: { key, deletedAt: null },
-      include: { versions: { where: { isPublished: true }, orderBy: { version: 'desc' }, take: 1 } },
+      include: {
+        versions: { where: { isPublished: true }, orderBy: { version: 'desc' }, take: 1 },
+      },
     });
     const version = form?.versions[0];
     if (!version) throw BusinessException.notFound('Version publicada del formulario');

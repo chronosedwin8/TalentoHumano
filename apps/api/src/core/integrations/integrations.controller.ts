@@ -72,7 +72,10 @@ export class IntegrationsController {
   @RequirePermission('settings.integration.manage')
   @Audit({ entityType: 'api_key', action: 'delete' })
   @ApiOperation({ summary: 'Revoca una API key' })
-  async revokeApiKey(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async revokeApiKey(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     await this.prisma.apiKey.updateMany({
       where: { id, companyId: ctx.companyId },
       data: { isActive: false, deletedAt: new Date() },
@@ -105,7 +108,10 @@ export class IntegrationsController {
   @RequirePermission('settings.integration.manage')
   @Audit({ entityType: 'webhook', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un webhook' })
-  async removeWebhook(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeWebhook(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     await this.prisma.webhook.updateMany({
       where: { id, companyId: ctx.companyId },
       data: { isActive: false, deletedAt: new Date() },

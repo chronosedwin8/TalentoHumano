@@ -57,7 +57,8 @@ export function endOfMonth(date: Date): Date {
 
 export function eachDay(start: Date, end: Date): Date[] {
   const out: Date[] = [];
-  for (let d = new Date(start.getTime()); d <= end; d = addDays(d, 1)) out.push(new Date(d.getTime()));
+  for (let d = new Date(start.getTime()); d <= end; d = addDays(d, 1))
+    out.push(new Date(d.getTime()));
   return out;
 }
 
@@ -192,12 +193,7 @@ export function colombianHolidays(year: number): Holiday[] {
 /* ------------------------------ misc -------------------------------- */
 
 /** Haversine distance in meters; used for geofence validation. */
-export function distanceMeters(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
+export function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6_371_000;
   const toRad = (v: number) => (v * Math.PI) / 180;
   const dLat = toRad(lat2 - lat1);
@@ -223,7 +219,11 @@ export function renderTemplate(template: string, context: Record<string, unknown
   return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) => {
     const value = path
       .split('.')
-      .reduce<unknown>((acc, key) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined), context);
+      .reduce<unknown>(
+        (acc, key) =>
+          acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined,
+        context,
+      );
     return value === undefined || value === null ? '' : String(value);
   });
 }
@@ -245,12 +245,18 @@ export function unique<T>(items: T[]): T[] {
   return [...new Set(items)];
 }
 
-export function groupBy<T, K extends string | number>(items: T[], key: (item: T) => K): Record<K, T[]> {
-  return items.reduce<Record<K, T[]>>((acc, item) => {
-    const k = key(item);
-    (acc[k] ??= []).push(item);
-    return acc;
-  }, {} as Record<K, T[]>);
+export function groupBy<T, K extends string | number>(
+  items: T[],
+  key: (item: T) => K,
+): Record<K, T[]> {
+  return items.reduce<Record<K, T[]>>(
+    (acc, item) => {
+      const k = key(item);
+      (acc[k] ??= []).push(item);
+      return acc;
+    },
+    {} as Record<K, T[]>,
+  );
 }
 
 export function formatDateEs(value: string | Date | null | undefined): string {
@@ -271,4 +277,64 @@ export function randomTrackingCode(random: () => number = Math.random): string {
   const part = () =>
     Array.from({ length: 4 }, () => alphabet[Math.floor(random() * alphabet.length)]).join('');
   return `TAL-${part()}-${part()}`;
+}
+
+/* --------------------------- leave accrual -------------------------- */
+
+export interface AccrualPeriod {
+  /** First day the employee belongs to the company. */
+  hiredAt: Date;
+  /** Termination date, when the employee already left. */
+  terminatedAt?: Date | null;
+  /** Calendar year the balance is computed for. */
+  year: number;
+  /** Days granted per full year of service (15 business days in Colombia). */
+  daysPerYear: number;
+  /** "Today" for the calculation; accrual never runs into the future. */
+  asOf?: Date;
+}
+
+/**
+ * Vacation days accrued so far in `year`, prorated over the days the employee
+ * actually belonged to the company inside that year.
+ *
+ * This is an entitlement count, never a monetary figure: the platform records
+ * and exports leave data but performs no payroll or settlement calculation.
+ */
+export function accrueVacationDays(period: AccrualPeriod): number {
+  const { hiredAt, terminatedAt, year, daysPerYear, asOf = new Date() } = period;
+
+  const yearStart = new Date(Date.UTC(year, 0, 1));
+  const yearEnd = new Date(Date.UTC(year, 11, 31));
+
+  const start = hiredAt > yearStart ? hiredAt : yearStart;
+  const end = terminatedAt && terminatedAt < yearEnd ? terminatedAt : yearEnd;
+  const effectiveEnd = end > asOf ? asOf : end;
+
+  // Hired after the window, or terminated before it starts.
+  if (effectiveEnd < start) return 0;
+
+  const daysWorked = Math.floor((effectiveEnd.getTime() - start.getTime()) / 86_400_000) + 1;
+  return round((daysWorked / 365) * daysPerYear, 2);
+}
+
+/**
+ * Days still available: what was accrued plus manual adjustments and carry
+ * over, minus what was taken and what is awaiting approval.
+ */
+export function availableLeaveDays(balance: {
+  accruedDays: number;
+  adjustedDays?: number;
+  carryOverDays?: number;
+  takenDays?: number;
+  pendingDays?: number;
+}): number {
+  return round(
+    balance.accruedDays +
+      (balance.adjustedDays ?? 0) +
+      (balance.carryOverDays ?? 0) -
+      (balance.takenDays ?? 0) -
+      (balance.pendingDays ?? 0),
+    2,
+  );
 }

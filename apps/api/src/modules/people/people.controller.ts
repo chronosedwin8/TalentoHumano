@@ -225,7 +225,10 @@ export class PeopleController {
   @Get('employees/:id/contracts')
   @RequirePermission('people.contract.read')
   @ApiOperation({ summary: 'Historial de vinculos del colaborador' })
-  async contracts(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async contracts(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     await this.scope.assertEmployeeInScope(ctx, 'people.contract.read', id);
     const canSeeSalary = this.scope.has(ctx, 'people.sensitive.read');
     const rows = await this.prisma.employmentContract.findMany({
@@ -244,7 +247,8 @@ export class PeopleController {
   @ApiOperation({ summary: 'Registra un contrato (salario informativo cifrado)' })
   async createContract(
     @Ctx() ctx: RequestContext,
-    @Body(new ZodValidationPipe(employmentContractSchema)) dto: z.infer<typeof employmentContractSchema>,
+    @Body(new ZodValidationPipe(employmentContractSchema))
+    dto: z.infer<typeof employmentContractSchema>,
   ) {
     const db = this.prisma.forCompany(ctx.companyId);
     if (dto.isCurrent) {
@@ -317,7 +321,8 @@ export class PeopleController {
   @ApiOperation({ summary: 'Registra un movimiento (promocion, traslado, cambio de jefe)' })
   async createMovement(
     @Ctx() ctx: RequestContext,
-    @Body(new ZodValidationPipe(employeeMovementSchema)) dto: z.infer<typeof employeeMovementSchema>,
+    @Body(new ZodValidationPipe(employeeMovementSchema))
+    dto: z.infer<typeof employeeMovementSchema>,
   ) {
     const db = this.prisma.forCompany(ctx.companyId);
     const employee = await db.employee.findFirst({ where: { id: dto.employeeId } });
@@ -385,7 +390,10 @@ export class PeopleController {
   @Get('employees/:id/documents')
   @RequirePermission('people.document.read')
   @ApiOperation({ summary: 'Legajo digital del colaborador' })
-  async documents(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async documents(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     await this.scope.assertEmployeeInScope(ctx, 'people.document.read', id);
     const rows = await this.prisma.employeeDocument.findMany({
       where: { companyId: ctx.companyId, employeeId: id, deletedAt: null },
@@ -443,7 +451,10 @@ export class PeopleController {
   @RequirePermission('people.document.delete')
   @Audit({ entityType: 'employee_document', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un documento del legajo' })
-  async removeDocument(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeDocument(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).employeeDocument, id, ctx.userId);
   }
 
@@ -483,7 +494,12 @@ export class PeopleController {
         }),
       ),
     )
-    dto: { employeeId: string; documentTypeIds: string[]; dueDate?: string | null; note?: string | null },
+    dto: {
+      employeeId: string;
+      documentTypeIds: string[];
+      dueDate?: string | null;
+      note?: string | null;
+    },
   ) {
     const db = this.prisma.forCompany(ctx.companyId);
     const created = [];
@@ -706,7 +722,9 @@ export class PeopleController {
     @Body(
       new ZodValidationPipe(
         z.object({
-          skills: z.array(z.object({ name: z.string().max(120), level: z.number().int().min(1).max(5) })),
+          skills: z.array(
+            z.object({ name: z.string().max(120), level: z.number().int().min(1).max(5) }),
+          ),
         }),
       ),
     )
@@ -731,13 +749,18 @@ export class PeopleController {
 
   @Post('employees/import')
   @RequirePermission('people.employee.import')
-  @Audit({ entityType: 'employee', action: 'create', summary: 'Importacion masiva de colaboradores' })
+  @Audit({
+    entityType: 'employee',
+    action: 'create',
+    summary: 'Importacion masiva de colaboradores',
+  })
   @ApiOperation({ summary: 'Importa colaboradores desde Excel con validacion linea a linea' })
   async importEmployees(
     @Ctx() ctx: RequestContext,
     @Body(new ZodValidationPipe(importSchema)) dto: z.infer<typeof importSchema>,
   ) {
-    const results: Array<{ row: number; status: 'ok' | 'error'; message?: string; id?: string }> = [];
+    const results: Array<{ row: number; status: 'ok' | 'error'; message?: string; id?: string }> =
+      [];
 
     for (const [index, raw] of dto.rows.entries()) {
       const parsed = employeeCreateSchema.safeParse({

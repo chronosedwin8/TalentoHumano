@@ -181,8 +181,16 @@ export const SUPPORTED_LOCALES = ['es', 'en', 'de'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_EMBED_PROVIDERS = [
-  { name: 'YouTube', domain: 'youtube.com', oembed: 'https://www.youtube.com/oembed?format=json&url=' },
-  { name: 'YouTube (corto)', domain: 'youtu.be', oembed: 'https://www.youtube.com/oembed?format=json&url=' },
+  {
+    name: 'YouTube',
+    domain: 'youtube.com',
+    oembed: 'https://www.youtube.com/oembed?format=json&url=',
+  },
+  {
+    name: 'YouTube (corto)',
+    domain: 'youtu.be',
+    oembed: 'https://www.youtube.com/oembed?format=json&url=',
+  },
   { name: 'Vimeo', domain: 'vimeo.com', oembed: 'https://vimeo.com/api/oembed.json?url=' },
   { name: 'Loom', domain: 'loom.com', oembed: null },
   { name: 'Genially', domain: 'genial.ly', oembed: null },
@@ -200,9 +208,17 @@ export const DEFAULT_EMBED_PROVIDERS = [
   { name: 'Kahoot', domain: 'kahoot.it', oembed: null },
   { name: 'Quizizz', domain: 'quizizz.com', oembed: null },
   { name: 'Spotify', domain: 'open.spotify.com', oembed: 'https://open.spotify.com/oembed?url=' },
-  { name: 'SoundCloud', domain: 'soundcloud.com', oembed: 'https://soundcloud.com/oembed?format=json&url=' },
+  {
+    name: 'SoundCloud',
+    domain: 'soundcloud.com',
+    oembed: 'https://soundcloud.com/oembed?format=json&url=',
+  },
   { name: 'X / Twitter', domain: 'twitter.com', oembed: null },
-  { name: 'CodePen', domain: 'codepen.io', oembed: 'https://codepen.io/api/oembed?format=json&url=' },
+  {
+    name: 'CodePen',
+    domain: 'codepen.io',
+    oembed: 'https://codepen.io/api/oembed?format=json&url=',
+  },
   { name: 'Mentimeter', domain: 'menti.com', oembed: null },
 ];
 

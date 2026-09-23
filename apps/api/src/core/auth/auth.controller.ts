@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  Post,
-  Req,
-  Res,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import {
@@ -28,6 +18,14 @@ import type { RequestContext } from '../../common/types/request-context';
 import { AuthService, type LoginResult } from './auth.service';
 
 const REFRESH_COOKIE = 'talento_refresh';
+
+/**
+ * Throttle decorators are evaluated when the class loads, before the config
+ * container exists, so they read the environment directly with the same
+ * defaults that `configuration.ts` validates.
+ */
+const LOGIN_LIMIT = Number(process.env.AUTH_LOGIN_LIMIT ?? 60);
+const REFRESH_LIMIT = Number(process.env.AUTH_REFRESH_LIMIT ?? 120);
 
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
@@ -54,7 +52,14 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  /**
+   * Brute force is stopped per account (`failedLoginAttempts` + `lockedUntil`),
+   * which is what actually protects a password. This IP limit only smooths out
+   * traffic, so it has to fit a whole office signing in from one NAT address
+   * at the start of the day without locking anybody out, and it is tunable
+   * through `AUTH_LOGIN_LIMIT` for networks that need more room.
+   */
+  @Throttle({ default: { limit: LOGIN_LIMIT, ttl: 60_000 } })
   @Post('login')
   @HttpCode(200)
   @ApiOperation({ summary: 'Inicia sesion y devuelve el token de acceso' })
@@ -70,7 +75,13 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  /**
+   * Generous on purpose: every full page load refreshes, and a whole office
+   * behind one NAT address shares this counter, so a tight limit would log
+   * legitimate users out. Refresh tokens are single use and rotate on every
+   * call, so guessing is what the limit has to deter, not normal traffic.
+   */
+  @Throttle({ default: { limit: REFRESH_LIMIT, ttl: 60_000 } })
   @Post('refresh')
   @HttpCode(200)
   @ApiOperation({ summary: 'Rota el token de refresco y emite un nuevo acceso' })
@@ -81,7 +92,10 @@ export class AuthController {
     @Body() body: { refreshToken?: string },
   ) {
     const token = (req as any).cookies?.[REFRESH_COOKIE] ?? body?.refreshToken;
-    const result = await this.auth.refresh(token ?? '', { ip, userAgent: req.headers['user-agent'] });
+    const result = await this.auth.refresh(token ?? '', {
+      ip,
+      userAgent: req.headers['user-agent'],
+    });
     this.setRefreshCookie(res, result.refreshToken);
     return this.present(result);
   }
@@ -126,9 +140,7 @@ export class AuthController {
   @Post('forgot-password')
   @HttpCode(204)
   @ApiOperation({ summary: 'Envia el enlace de recuperacion (respuesta siempre 204)' })
-  async forgotPassword(
-    @Body(new ZodValidationPipe(forgotPasswordSchema)) dto: { email: string },
-  ) {
+  async forgotPassword(@Body(new ZodValidationPipe(forgotPasswordSchema)) dto: { email: string }) {
     await this.auth.forgotPassword(dto.email);
   }
 
@@ -192,7 +204,8 @@ export class AuthController {
   @ApiOperation({ summary: 'Desactiva el doble factor' })
   async disableTwoFactor(
     @Ctx() ctx: RequestContext,
-    @Body(new ZodValidationPipe(z.object({ password: z.string().min(1) }))) dto: { password: string },
+    @Body(new ZodValidationPipe(z.object({ password: z.string().min(1) })))
+    dto: { password: string },
   ) {
     await this.auth.disableTwoFactor(ctx, dto.password);
   }

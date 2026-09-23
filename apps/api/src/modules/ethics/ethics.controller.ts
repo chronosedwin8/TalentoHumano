@@ -2,7 +2,13 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { MODULES, uuid } from '@talento/shared';
 import { z } from 'zod';
-import { Audit, Ctx, RequireModule, RequirePermission, SensitiveAccess } from '../../common/decorators';
+import {
+  Audit,
+  Ctx,
+  RequireModule,
+  RequirePermission,
+  SensitiveAccess,
+} from '../../common/decorators';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
@@ -49,7 +55,11 @@ export class EthicsController {
     @Query() query: { page?: string; limit?: string; status?: string },
   ) {
     const { page, limit } = parsePage(query);
-    const { rows, total } = await this.ethics.listReports(ctx, { page, limit, status: query.status });
+    const { rows, total } = await this.ethics.listReports(ctx, {
+      page,
+      limit,
+      status: query.status,
+    });
     return paged(rows, total, page, limit);
   }
 

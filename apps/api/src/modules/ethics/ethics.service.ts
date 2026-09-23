@@ -48,9 +48,15 @@ export class EthicsService {
         categoryId: category?.id ?? null,
         isAnonymous: input.isAnonymous ?? true,
         // Identity is only stored when the reporter chose to identify.
-        reporterName: input.isAnonymous ? null : this.encryption.encrypt(input.reporterName ?? null),
-        reporterEmail: input.isAnonymous ? null : this.encryption.encrypt(input.reporterEmail ?? null),
-        reporterPhone: input.isAnonymous ? null : this.encryption.encrypt(input.reporterPhone ?? null),
+        reporterName: input.isAnonymous
+          ? null
+          : this.encryption.encrypt(input.reporterName ?? null),
+        reporterEmail: input.isAnonymous
+          ? null
+          : this.encryption.encrypt(input.reporterEmail ?? null),
+        reporterPhone: input.isAnonymous
+          ? null
+          : this.encryption.encrypt(input.reporterPhone ?? null),
         relationship: input.relationship ?? 'employee',
         subject: this.encryption.encrypt(input.subject) as string,
         description: this.encryption.encrypt(input.description) as string,
@@ -92,7 +98,10 @@ export class EthicsService {
         ethicsCase: { select: { caseNumber: true, status: true, closedAt: true } },
       },
     });
-    if (!report || !this.encryption.safeEqual(report.accessKeyHash, this.encryption.hash(accessKey))) {
+    if (
+      !report ||
+      !this.encryption.safeEqual(report.accessKeyHash, this.encryption.hash(accessKey))
+    ) {
       throw new BusinessException(
         ERROR_CODES.ETHICS_CODE_INVALID,
         'El codigo de seguimiento o la clave no son validos',
@@ -122,7 +131,10 @@ export class EthicsService {
     const report = await this.prisma.ethicsReport.findFirst({
       where: { trackingCode: trackingCode.trim().toUpperCase() },
     });
-    if (!report || !this.encryption.safeEqual(report.accessKeyHash, this.encryption.hash(accessKey))) {
+    if (
+      !report ||
+      !this.encryption.safeEqual(report.accessKeyHash, this.encryption.hash(accessKey))
+    ) {
       throw new BusinessException(
         ERROR_CODES.ETHICS_CODE_INVALID,
         'El codigo de seguimiento o la clave no son validos',
@@ -163,16 +175,16 @@ export class EthicsService {
     const where = {
       companyId: ctx.companyId,
       ...(params.status ? { status: params.status as never } : {}),
-      OR: [
-        { ethicsCase: null },
-        { ethicsCase: { NOT: { excludedUserIds: { has: ctx.userId } } } },
-      ],
+      OR: [{ ethicsCase: null }, { ethicsCase: { NOT: { excludedUserIds: { has: ctx.userId } } } }],
     };
 
     const [rows, total] = await Promise.all([
       this.prisma.ethicsReport.findMany({
         where,
-        include: { category: { select: { name: true } }, ethicsCase: { select: { id: true, caseNumber: true } } },
+        include: {
+          category: { select: { name: true } },
+          ethicsCase: { select: { id: true, caseNumber: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (params.page - 1) * params.limit,
         take: params.limit,
@@ -254,7 +266,12 @@ export class EthicsService {
   async openCase(
     ctx: RequestContext,
     reportId: string,
-    input: { severity?: string; leadUserId?: string | null; excludedUserIds?: string[]; investigationPlan?: string | null },
+    input: {
+      severity?: string;
+      leadUserId?: string | null;
+      excludedUserIds?: string[];
+      investigationPlan?: string | null;
+    },
   ) {
     const report = await this.prisma.ethicsReport.findFirst({
       where: { id: reportId, companyId: ctx.companyId },
@@ -392,7 +409,9 @@ export class EthicsService {
       anonymousRate: total ? Number(((anonymous / total) * 100).toFixed(1)) : 0,
       averageClosureDays: avgClosureDays,
       byCategory: byCategory.map((row) => ({
-        label: row.categoryId ? (categoryName.get(row.categoryId) ?? 'Sin categoria') : 'Sin categoria',
+        label: row.categoryId
+          ? (categoryName.get(row.categoryId) ?? 'Sin categoria')
+          : 'Sin categoria',
         value: row._count._all,
       })),
       byStatus: byStatus.map((row) => ({ label: row.status, value: row._count._all })),

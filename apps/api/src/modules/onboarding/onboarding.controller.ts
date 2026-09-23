@@ -15,7 +15,16 @@ const templateTaskSchema = z.object({
   ownerType: z.enum(['employee', 'manager', 'hr', 'it', 'buddy', 'other']),
   ownerUserId: uuid.nullable().optional(),
   kind: z
-    .enum(['document', 'form', 'course', 'meeting', 'reading', 'equipment', 'system_access', 'generic'])
+    .enum([
+      'document',
+      'form',
+      'course',
+      'meeting',
+      'reading',
+      'equipment',
+      'system_access',
+      'generic',
+    ])
     .default('generic'),
   offsetDays: z.number().int().min(-90).max(365).default(0),
   courseId: uuid.nullable().optional(),
@@ -134,7 +143,10 @@ export class OnboardingController {
   @RequirePermission('onboarding.template.delete')
   @Audit({ entityType: 'onboarding_template', action: 'delete' })
   @ApiOperation({ summary: 'Elimina una plantilla' })
-  async removeTemplate(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeTemplate(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).onboardingTemplate, id, ctx.userId);
   }
 
@@ -145,7 +157,8 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Procesos de ingreso o salida' })
   async processes(
     @Ctx() ctx: RequestContext,
-    @Query() query: { page?: string; limit?: string; kind?: string; status?: string; employeeId?: string },
+    @Query()
+    query: { page?: string; limit?: string; kind?: string; status?: string; employeeId?: string },
   ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).onboardingProcess, query, {
       where: {
@@ -166,7 +179,10 @@ export class OnboardingController {
   @Get('board')
   @RequirePermission('onboarding.process.read')
   @ApiOperation({ summary: 'Tablero de progreso de ingresos o salidas' })
-  async board(@Ctx() ctx: RequestContext, @Query('kind') kind: 'onboarding' | 'offboarding' = 'onboarding') {
+  async board(
+    @Ctx() ctx: RequestContext,
+    @Query('kind') kind: 'onboarding' | 'offboarding' = 'onboarding',
+  ) {
     return this.onboarding.board(ctx, kind);
   }
 
@@ -187,7 +203,10 @@ export class OnboardingController {
             position: { select: { name: true } },
           },
         },
-        tasks: { orderBy: { position: 'asc' }, include: { assignee: { select: { fullName: true } } } },
+        tasks: {
+          orderBy: { position: 'asc' },
+          include: { assignee: { select: { fullName: true } } },
+        },
       },
     });
   }
@@ -261,7 +280,9 @@ export class OnboardingController {
       where: { id },
       data: {
         ...defined(dto),
-        ...(dto.dueDate !== undefined ? { dueDate: dto.dueDate ? new Date(dto.dueDate) : null } : {}),
+        ...(dto.dueDate !== undefined
+          ? { dueDate: dto.dueDate ? new Date(dto.dueDate) : null }
+          : {}),
       } as never,
     });
     const task = await db.onboardingTask.findFirst({ where: { id } });
@@ -296,7 +317,10 @@ export class OnboardingController {
   @Get('exit-interviews')
   @RequirePermission('onboarding.exitinterview.read')
   @ApiOperation({ summary: 'Entrevistas de retiro registradas' })
-  async exitInterviews(@Ctx() ctx: RequestContext, @Query() query: { page?: string; limit?: string }) {
+  async exitInterviews(
+    @Ctx() ctx: RequestContext,
+    @Query() query: { page?: string; limit?: string },
+  ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).exitInterview, query, {
       include: { employee: { select: { id: true, fullName: true, terminatedAt: true } } },
       defaultSort: { conductedAt: 'desc' },

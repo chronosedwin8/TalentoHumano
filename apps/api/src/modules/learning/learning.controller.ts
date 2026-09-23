@@ -41,7 +41,14 @@ const quizSchema = z.object({
       z.object({
         text: z.string().min(1).max(4000),
         type: z
-          .enum(['single_choice', 'multiple_choice', 'true_false', 'short_text', 'long_text', 'numeric'])
+          .enum([
+            'single_choice',
+            'multiple_choice',
+            'true_false',
+            'short_text',
+            'long_text',
+            'numeric',
+          ])
           .default('single_choice'),
         points: z.number().int().min(1).max(100).default(1),
         explanation: z.string().max(2000).nullable().optional(),
@@ -119,7 +126,8 @@ export class LearningController {
   @ApiOperation({ summary: 'Catalogo de cursos' })
   async courses(
     @Ctx() ctx: RequestContext,
-    @Query() query: { page?: string; limit?: string; status?: string; category?: string; search?: string },
+    @Query()
+    query: { page?: string; limit?: string; status?: string; category?: string; search?: string },
   ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).course, query, {
       where: {
@@ -148,7 +156,9 @@ export class LearningController {
             lessons: {
               where: { deletedAt: null },
               orderBy: { position: 'asc' },
-              include: { content: { select: { version: true, isPublished: true, updatedAt: true } } },
+              include: {
+                content: { select: { version: true, isPublished: true, updatedAt: true } },
+              },
             },
           },
         },
@@ -190,7 +200,10 @@ export class LearningController {
   @RequirePermission('learning.course.publish')
   @Audit({ entityType: 'course', action: 'update' })
   @ApiOperation({ summary: 'Publica el curso' })
-  async publishCourse(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async publishCourse(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.prisma.forCompany(ctx.companyId).course.update({
       where: { id },
       data: { status: 'published', publishedAt: new Date() },
@@ -201,7 +214,10 @@ export class LearningController {
   @RequirePermission('learning.course.delete')
   @Audit({ entityType: 'course', action: 'delete' })
   @ApiOperation({ summary: 'Archiva un curso' })
-  async removeCourse(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeCourse(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).course, id, ctx.userId);
   }
 
@@ -266,7 +282,10 @@ export class LearningController {
   @Get('lessons/:id/versions')
   @RequirePermission('learning.lesson.read')
   @ApiOperation({ summary: 'Historial de versiones del contenido' })
-  async lessonVersions(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async lessonVersions(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.prisma.forCompany(ctx.companyId).lessonContentVersion.findMany({
       where: { lessonId: id },
       orderBy: { version: 'desc' },
@@ -336,7 +355,8 @@ export class LearningController {
   @ApiOperation({ summary: 'Galeria de medios de la empresa' })
   async media(
     @Ctx() ctx: RequestContext,
-    @Query() query: { page?: string; limit?: string; kind?: string; search?: string; folderId?: string },
+    @Query()
+    query: { page?: string; limit?: string; kind?: string; search?: string; folderId?: string },
   ) {
     const result = await listPaged(this.prisma.forCompany(ctx.companyId).mediaItem, query, {
       where: {
@@ -379,7 +399,9 @@ export class LearningController {
     });
     if (!providers.length) {
       await this.learning.ensureDefaultEmbedProviders(ctx.companyId);
-      return this.prisma.forCompany(ctx.companyId).embedProvider.findMany({ orderBy: { name: 'asc' } });
+      return this.prisma
+        .forCompany(ctx.companyId)
+        .embedProvider.findMany({ orderBy: { name: 'asc' } });
     }
     return providers;
   }
@@ -474,7 +496,14 @@ export class LearningController {
   @ApiOperation({ summary: 'Inscripciones a cursos' })
   async enrollments(
     @Ctx() ctx: RequestContext,
-    @Query() query: { page?: string; limit?: string; courseId?: string; employeeId?: string; status?: string },
+    @Query()
+    query: {
+      page?: string;
+      limit?: string;
+      courseId?: string;
+      employeeId?: string;
+      status?: string;
+    },
   ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).enrollment, query, {
       where: {
@@ -544,7 +573,10 @@ export class LearningController {
   async sessions(@Ctx() ctx: RequestContext, @Query() query: { page?: string; limit?: string }) {
     return listPaged(this.prisma.forCompany(ctx.companyId).trainingSession, query, {
       where: { deletedAt: null },
-      include: { course: { select: { id: true, title: true } }, _count: { select: { attendance: true } } },
+      include: {
+        course: { select: { id: true, title: true } },
+        _count: { select: { attendance: true } },
+      },
       defaultSort: { startsAt: 'desc' },
       sortable: ['startsAt'],
     });

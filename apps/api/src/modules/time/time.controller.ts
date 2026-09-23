@@ -8,14 +8,17 @@ import { EncryptionService } from '../../common/crypto/encryption.service';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged, softDelete } from '../../common/utils/crud';
+import { listPaged } from '../../common/utils/crud';
 import { paged, parsePage } from '../../common/utils/pagination';
 import { TimeService } from './time.service';
 
 const shiftSchema = z.object({
   name: z.string().trim().min(2).max(120),
   code: z.string().trim().min(1).max(30),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#0ea5e9'),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default('#0ea5e9'),
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
   breakMinutes: z.number().int().min(0).max(240).default(60),
@@ -27,7 +30,14 @@ const shiftSchema = z.object({
 
 const assignShiftsSchema = z.object({
   assignments: z
-    .array(z.object({ shiftId: uuid, employeeId: uuid, date: isoDate, notes: z.string().max(500).optional() }))
+    .array(
+      z.object({
+        shiftId: uuid,
+        employeeId: uuid,
+        date: isoDate,
+        notes: z.string().max(500).optional(),
+      }),
+    )
     .min(1)
     .max(1000),
   publish: z.boolean().default(false),
@@ -75,7 +85,8 @@ export class TimeController {
     @Ctx() ctx: RequestContext,
     @Body(new ZodValidationPipe(clockEntrySchema)) dto: z.infer<typeof clockEntrySchema>,
   ) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     return this.time.clock(ctx, ctx.employeeId, dto as never);
   }
 
@@ -161,7 +172,17 @@ export class TimeController {
       new ZodValidationPipe(
         z.object({
           status: z
-            .enum(['pending', 'present', 'absent', 'late', 'early_leave', 'leave', 'holiday', 'rest', 'remote'])
+            .enum([
+              'pending',
+              'present',
+              'absent',
+              'late',
+              'early_leave',
+              'leave',
+              'holiday',
+              'rest',
+              'remote',
+            ])
             .optional(),
           notes: z.string().max(500).nullable().optional(),
           workedMinutes: z.number().int().min(0).max(1440).optional(),
@@ -202,7 +223,8 @@ export class TimeController {
     @Ctx() ctx: RequestContext,
     @Body(new ZodValidationPipe(justificationSchema)) dto: z.infer<typeof justificationSchema>,
   ) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     return this.prisma.attendanceJustification.create({
       data: {
         companyId: ctx.companyId,
@@ -223,7 +245,9 @@ export class TimeController {
   ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).attendanceJustification, query, {
       where: { status: (query.status as never) ?? 'pending' },
-      include: { attendanceDay: { include: { employee: { select: { id: true, fullName: true } } } } },
+      include: {
+        attendanceDay: { include: { employee: { select: { id: true, fullName: true } } } },
+      },
       defaultSort: { createdAt: 'desc' },
     });
   }
@@ -536,7 +560,11 @@ export class TimeController {
 
   @Post('import')
   @RequirePermission('time.device.manage')
-  @Audit({ entityType: 'time_clock_entry', action: 'create', summary: 'Importacion CSV de marcaciones' })
+  @Audit({
+    entityType: 'time_clock_entry',
+    action: 'create',
+    summary: 'Importacion CSV de marcaciones',
+  })
   @ApiOperation({ summary: 'Importa marcaciones desde un archivo CSV ya parseado' })
   async importEntries(
     @Ctx() ctx: RequestContext,
@@ -584,7 +612,10 @@ export class TimeController {
   @RequirePermission('time.device.manage')
   @Audit({ entityType: 'geofence', action: 'delete' })
   @ApiOperation({ summary: 'Elimina una geocerca' })
-  async removeGeofence(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeGeofence(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     await this.prisma.geofence.deleteMany({ where: { id, companyId: ctx.companyId } });
     return { id };
   }

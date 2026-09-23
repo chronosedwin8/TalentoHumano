@@ -40,7 +40,7 @@ export class StorageService {
   }
 
   buildKey(companyId: string | null, filename: string): string {
-    const safe = filename.replace(/[^\w.\-]+/g, '_').slice(-120);
+    const safe = filename.replace(/[^\w.-]+/g, '_').slice(-120);
     const now = new Date();
     return [
       companyId ?? 'platform',
@@ -50,7 +50,11 @@ export class StorageService {
     ].join('/');
   }
 
-  async presignUpload(storageKey: string, mimeType: string, expiresIn = 900): Promise<PresignedUpload> {
+  async presignUpload(
+    storageKey: string,
+    mimeType: string,
+    expiresIn = 900,
+  ): Promise<PresignedUpload> {
     if (this.driver === 's3') {
       return {
         url: this.signS3Url('PUT', storageKey, expiresIn),
@@ -85,7 +89,7 @@ export class StorageService {
 
   private localPath(storageKey: string): string {
     const full = resolve(join(this.root, storageKey));
-    if (!full.startsWith(this.root)) throw new Error('Ruta de archivo invalida');
+    if (!full.startsWith(this.root)) throw new Error('Invalid file path');
     return full;
   }
 
@@ -107,7 +111,10 @@ export class StorageService {
     return expected === signature;
   }
 
-  async writeStream(storageKey: string, stream: Readable): Promise<{ size: number; checksum: string }> {
+  async writeStream(
+    storageKey: string,
+    stream: Readable,
+  ): Promise<{ size: number; checksum: string }> {
     const target = this.localPath(storageKey);
     await mkdir(dirname(target), { recursive: true });
     const hash = createHash('sha256');
@@ -126,7 +133,10 @@ export class StorageService {
     return { size, checksum: hash.digest('hex') };
   }
 
-  async writeBuffer(storageKey: string, buffer: Buffer): Promise<{ size: number; checksum: string }> {
+  async writeBuffer(
+    storageKey: string,
+    buffer: Buffer,
+  ): Promise<{ size: number; checksum: string }> {
     const target = this.localPath(storageKey);
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, buffer);
@@ -155,7 +165,7 @@ export class StorageService {
       await rm(this.localPath(storageKey), { force: true });
       return;
     }
-    this.logger.warn(`Borrado en S3 pendiente para ${storageKey}`);
+    this.logger.warn(`S3 delete still pending for ${storageKey}`);
   }
 
   /* ------------------------------ s3 driver ------------------------------ */
@@ -218,7 +228,10 @@ export class StorageService {
 
     const hmac = (key: Buffer | string, data: string) =>
       createHmac('sha256', key).update(data, 'utf8').digest();
-    const signingKey = hmac(hmac(hmac(hmac(`AWS4${secretKey}`, dateStamp), region), 's3'), 'aws4_request');
+    const signingKey = hmac(
+      hmac(hmac(hmac(`AWS4${secretKey}`, dateStamp), region), 's3'),
+      'aws4_request',
+    );
     const signature = createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
 
     return `${protocol}//${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;

@@ -125,7 +125,10 @@ export class LeavesController {
   @RequirePermission('leaves.type.manage')
   @Audit({ entityType: 'leave_type', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un tipo de ausencia' })
-  async removeType(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeType(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).leaveType, id, ctx.userId);
   }
 
@@ -196,7 +199,8 @@ export class LeavesController {
   @ApiOperation({ summary: 'Ajusta manualmente el saldo (queda auditado)' })
   async adjustBalance(
     @Ctx() ctx: RequestContext,
-    @Body(new ZodValidationPipe(balanceAdjustmentSchema)) dto: z.infer<typeof balanceAdjustmentSchema>,
+    @Body(new ZodValidationPipe(balanceAdjustmentSchema))
+    dto: z.infer<typeof balanceAdjustmentSchema>,
   ) {
     return this.leaves.adjustBalance(ctx, dto);
   }
@@ -350,7 +354,11 @@ export class LeavesController {
   @ApiOperation({ summary: 'Carga los festivos de Colombia para los anos indicados' })
   async loadColombianHolidays(
     @Ctx() ctx: RequestContext,
-    @Body(new ZodValidationPipe(z.object({ years: z.array(z.number().int().min(2000).max(2100)).min(1) })))
+    @Body(
+      new ZodValidationPipe(
+        z.object({ years: z.array(z.number().int().min(2000).max(2100)).min(1) }),
+      ),
+    )
     dto: { years: number[] },
   ) {
     return { created: await this.leaves.seedHolidays(ctx.companyId, dto.years) };
@@ -360,7 +368,10 @@ export class LeavesController {
   @RequirePermission('leaves.holiday.manage')
   @Audit({ entityType: 'holiday', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un festivo' })
-  async removeHoliday(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeHoliday(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     await this.prisma.holiday.deleteMany({ where: { id, companyId: ctx.companyId } });
     return { id };
   }
@@ -414,7 +425,10 @@ export class LeavesController {
   @RequirePermission('leaves.event.delete')
   @Audit({ entityType: 'employee_event', action: 'delete' })
   @ApiOperation({ summary: 'Elimina una novedad' })
-  async removeEvent(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeEvent(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).employeeEvent, id, ctx.userId);
   }
 
@@ -485,7 +499,8 @@ export class LeavesController {
   async addDisciplinaryStep(
     @Ctx() ctx: RequestContext,
     @Param('id', new ZodValidationPipe(uuid)) id: string,
-    @Body(new ZodValidationPipe(disciplinaryStepSchema)) dto: z.infer<typeof disciplinaryStepSchema>,
+    @Body(new ZodValidationPipe(disciplinaryStepSchema))
+    dto: z.infer<typeof disciplinaryStepSchema>,
   ) {
     return this.prisma.disciplinaryCaseStep.create({
       data: {
@@ -530,13 +545,17 @@ export class LeavesController {
       'Content-Disposition',
       `attachment; filename="novedades-${dto.from}-${dto.to}.csv"`,
     );
-    return `﻿${csv}`;
+    // The BOM makes Excel open the CSV as UTF-8 instead of Latin-1.
+    return `\uFEFF${csv}`;
   }
 
   @Get('payroll-export')
   @RequirePermission('leaves.export.execute')
   @ApiOperation({ summary: 'Historial de exportaciones a nomina' })
-  async payrollExports(@Ctx() ctx: RequestContext, @Query() query: { page?: string; limit?: string }) {
+  async payrollExports(
+    @Ctx() ctx: RequestContext,
+    @Query() query: { page?: string; limit?: string },
+  ) {
     return listPaged(this.prisma.forCompany(ctx.companyId).payrollExport, query, {
       defaultSort: { createdAt: 'desc' },
     });

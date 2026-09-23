@@ -138,7 +138,11 @@ export class UsersService {
     }
 
     this.access.invalidate(membership.id);
-    return { userId: user.id, companyUserId: membership.id, temporaryPassword: existing ? null : temporaryPassword };
+    return {
+      userId: user.id,
+      companyUserId: membership.id,
+      temporaryPassword: existing ? null : temporaryPassword,
+    };
   }
 
   async assignRoles(ctx: RequestContext, companyUserId: string, roleIds: string[]): Promise<void> {
@@ -148,7 +152,11 @@ export class UsersService {
     if (!membership) throw BusinessException.notFound('Usuario de la empresa');
 
     const roles = await this.prisma.role.findMany({
-      where: { id: { in: roleIds }, OR: [{ companyId: ctx.companyId }, { companyId: null }], deletedAt: null },
+      where: {
+        id: { in: roleIds },
+        OR: [{ companyId: ctx.companyId }, { companyId: null }],
+        deletedAt: null,
+      },
       select: { id: true, key: true },
     });
     if (roles.some((r) => r.key === SYSTEM_ROLES.SUPERADMIN) && !ctx.isSuperadmin) {
@@ -350,7 +358,8 @@ export class UsersService {
       include: { _count: { select: { users: true } } },
     });
     if (!role) throw BusinessException.notFound('Rol');
-    if (role.isSystem) throw BusinessException.validation('Los roles del sistema no se pueden eliminar');
+    if (role.isSystem)
+      throw BusinessException.validation('Los roles del sistema no se pueden eliminar');
     if (role._count.users > 0) {
       throw BusinessException.conflict('El rol tiene usuarios asignados; reasignelos primero');
     }

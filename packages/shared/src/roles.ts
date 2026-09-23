@@ -212,7 +212,13 @@ export const SYSTEM_ROLE_DEFINITIONS: SystemRoleDefinition[] = [
       'analytics.dashboard.read',
       'workflow.instance.read',
     ],
-    modules: [MODULES.DASHBOARD, MODULES.RECRUITING, MODULES.ONBOARDING, MODULES.PEOPLE, MODULES.ANALYTICS],
+    modules: [
+      MODULES.DASHBOARD,
+      MODULES.RECRUITING,
+      MODULES.ONBOARDING,
+      MODULES.PEOPLE,
+      MODULES.ANALYTICS,
+    ],
   },
   {
     key: SYSTEM_ROLES.MANAGER,

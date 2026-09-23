@@ -14,7 +14,7 @@ import { BusinessException } from '../../common/exceptions/business.exception';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
-import { defined, listPaged, softDelete } from '../../common/utils/crud';
+import { listPaged, softDelete } from '../../common/utils/crud';
 import { ScopeService } from '../../core/access/scope.service';
 import { PerformanceService } from './performance.service';
 
@@ -170,7 +170,8 @@ export class PerformanceController {
   @ApiOperation({ summary: 'Arbol de objetivos alineados' })
   async objectives(
     @Ctx() ctx: RequestContext,
-    @Query() query: { cycleId?: string; level?: string; employeeId?: string; page?: string; limit?: string },
+    @Query()
+    query: { cycleId?: string; level?: string; employeeId?: string; page?: string; limit?: string },
   ) {
     const employeeScope = await this.scope.employeeScope(ctx, 'performance.objective.read');
     return listPaged(this.prisma.forCompany(ctx.companyId).objective, query, {
@@ -224,7 +225,10 @@ export class PerformanceController {
   @RequirePermission('performance.objective.delete')
   @Audit({ entityType: 'objective', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un objetivo' })
-  async removeObjective(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeObjective(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).objective, id, ctx.userId);
   }
 
@@ -342,7 +346,16 @@ export class PerformanceController {
         cycle: { status: { in: ['self_assessment', 'evaluation'] } },
       },
       include: {
-        cycle: { select: { id: true, name: true, type: true, status: true, evalEnd: true, templateId: true } },
+        cycle: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            status: true,
+            evalEnd: true,
+            templateId: true,
+          },
+        },
         subject: { select: { id: true, fullName: true, position: { select: { name: true } } } },
       },
       orderBy: { createdAt: 'asc' },
@@ -488,7 +501,8 @@ export class PerformanceController {
     )
     dto: Record<string, any>,
   ) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     return this.prisma.forCompany(ctx.companyId).oneOnOne.create({
       data: {
         leadEmployeeId: ctx.employeeId,

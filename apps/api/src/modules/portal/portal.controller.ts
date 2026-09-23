@@ -106,7 +106,12 @@ export class PortalController {
         : 0,
       employeeId
         ? this.prisma.leaveRequest.findMany({
-            where: { companyId, employeeId, status: { in: ['pending', 'approved'] }, deletedAt: null },
+            where: {
+              companyId,
+              employeeId,
+              status: { in: ['pending', 'approved'] },
+              deletedAt: null,
+            },
             include: { leaveType: { select: { name: true, color: true } } },
             orderBy: { startDate: 'desc' },
             take: 5,

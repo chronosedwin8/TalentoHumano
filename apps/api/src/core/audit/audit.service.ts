@@ -82,7 +82,7 @@ export class AuditService {
       });
     } catch (error) {
       // Auditing must never break the business operation.
-      this.logger.error(`No se pudo registrar auditoria: ${(error as Error).message}`);
+      this.logger.error(`Could not write the audit entry: ${(error as Error).message}`);
     }
   }
 
@@ -108,7 +108,7 @@ export class AuditService {
         },
       });
     } catch (error) {
-      this.logger.error(`No se pudo registrar acceso sensible: ${(error as Error).message}`);
+      this.logger.error(`Could not write the sensitive access entry: ${(error as Error).message}`);
     }
   }
 
@@ -132,7 +132,12 @@ export class AuditService {
       ...(filters.actorId ? { actorId: filters.actorId } : {}),
       ...(filters.action ? { action: filters.action } : {}),
       ...(filters.from || filters.to
-        ? { createdAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } }
+        ? {
+            createdAt: {
+              ...(filters.from ? { gte: filters.from } : {}),
+              ...(filters.to ? { lte: filters.to } : {}),
+            },
+          }
         : {}),
     };
 

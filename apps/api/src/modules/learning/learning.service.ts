@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { Block, BlockDocument } from '@talento/shared';
-import { DEFAULT_EMBED_PROVIDERS, DOMAIN_EVENTS, ERROR_CODES, addMonths, slugify } from '@talento/shared';
+import {
+  DEFAULT_EMBED_PROVIDERS,
+  DOMAIN_EVENTS,
+  ERROR_CODES,
+  addMonths,
+  slugify,
+} from '@talento/shared';
 import { BusinessException } from '../../common/exceptions/business.exception';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import type { RequestContext } from '../../common/types/request-context';
@@ -229,7 +235,8 @@ export class LearningService {
     });
 
     const blockState = { ...((existing?.blockState as Record<string, unknown>) ?? {}) };
-    if (input.blockId) blockState[input.blockId] = { completed: true, at: new Date().toISOString() };
+    if (input.blockId)
+      blockState[input.blockId] = { completed: true, at: new Date().toISOString() };
 
     const lesson = await db.lesson.findFirst({
       where: { id: input.lessonId },
@@ -473,7 +480,7 @@ export class LearningService {
       mandatoryCompliance: mandatory.length
         ? Number(((mandatoryDone / mandatory.length) * 100).toFixed(1))
         : 100,
-      averageScore: Number((Number(hours._avg.score ?? 0)).toFixed(1)),
+      averageScore: Number(Number(hours._avg.score ?? 0).toFixed(1)),
       hoursPerEmployee: activeEmployees
         ? Number(((hours._sum.timeSpentMinutes ?? 0) / 60 / activeEmployees).toFixed(1))
         : 0,

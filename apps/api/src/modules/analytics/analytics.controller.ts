@@ -98,7 +98,10 @@ export class AnalyticsController {
   @RequirePermission('analytics.alert.manage')
   @Audit({ entityType: 'analytics_alert', action: 'update' })
   @ApiOperation({ summary: 'Marca una alerta como resuelta' })
-  async resolveAlert(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async resolveAlert(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return this.prisma.forCompany(ctx.companyId).analyticsAlert.update({
       where: { id },
       data: { isResolved: true, resolvedAt: new Date() },
@@ -221,14 +224,18 @@ export class AnalyticsController {
     ].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${definition.name}.csv"`);
-    return `﻿${csv}`;
+    // The BOM makes Excel open the CSV as UTF-8 instead of Latin-1.
+    return `\uFEFF${csv}`;
   }
 
   @Delete('reports/:id')
   @RequirePermission('analytics.report.delete')
   @Audit({ entityType: 'report_definition', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un reporte guardado' })
-  async removeReport(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeReport(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).reportDefinition, id, ctx.userId);
   }
 

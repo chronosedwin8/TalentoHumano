@@ -111,7 +111,10 @@ export class PerformanceService {
     });
   }
 
-  async checkIn(ctx: RequestContext, input: { keyResultId: string; value: number; confidence: string; comment?: string | null }) {
+  async checkIn(
+    ctx: RequestContext,
+    input: { keyResultId: string; value: number; confidence: string; comment?: string | null },
+  ) {
     const db = this.prisma.forCompany(ctx.companyId);
     const keyResult = await db.keyResult.findFirst({ where: { id: input.keyResultId } });
     if (!keyResult) throw BusinessException.notFound('Resultado clave');
@@ -316,7 +319,9 @@ export class PerformanceService {
       const ratings = assignment.responses
         .filter((r) => r.rating != null)
         .map((r) => Number(r.rating));
-      const average = ratings.length ? round(ratings.reduce((a, b) => a + b, 0) / ratings.length, 2) : null;
+      const average = ratings.length
+        ? round(ratings.reduce((a, b) => a + b, 0) / ratings.length, 2)
+        : null;
       if (!byRelation[key]) byRelation[key] = { count: 0, average: null };
       byRelation[key].count += 1;
       if (average != null) {
@@ -414,7 +419,13 @@ export class PerformanceService {
 
   async setNineBox(
     ctx: RequestContext,
-    input: { cycleId: string; employeeId: string; performance: number; potential: number; notes?: string | null },
+    input: {
+      cycleId: string;
+      employeeId: string;
+      performance: number;
+      potential: number;
+      notes?: string | null;
+    },
   ) {
     // Box numbering: 1 bottom-left to 9 top-right.
     const box = (input.potential - 1) * 3 + input.performance;

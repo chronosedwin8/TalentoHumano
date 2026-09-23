@@ -59,7 +59,9 @@ export class ScopeService {
   /** Prisma `where` fragment for an employee id column. */
   whereEmployee(scope: EmployeeScope, field = 'employeeId'): Record<string, unknown> {
     if (scope.kind === 'all') return {};
-    return { [field]: { in: scope.ids.length ? scope.ids : ['00000000-0000-0000-0000-000000000000'] } };
+    return {
+      [field]: { in: scope.ids.length ? scope.ids : ['00000000-0000-0000-0000-000000000000'] },
+    };
   }
 
   /** The caller plus every direct and indirect report. */

@@ -92,7 +92,12 @@ export class DocumentsService {
   /** Renders a template into a stored, verifiable document. */
   async generate(
     ctx: RequestContext,
-    input: { templateId: string; employeeId?: string | null; extraVariables?: Record<string, unknown>; isSelfService?: boolean },
+    input: {
+      templateId: string;
+      employeeId?: string | null;
+      extraVariables?: Record<string, unknown>;
+      isSelfService?: boolean;
+    },
   ) {
     const template = await this.prisma.documentTemplate.findFirst({
       where: { id: input.templateId, companyId: ctx.companyId, deletedAt: null },
@@ -107,8 +112,14 @@ export class DocumentsService {
       ...(input.extraVariables ?? {}),
     };
 
-    const verificationCode = this.buildVerificationCode(ctx.companyId, input.employeeId ?? ctx.userId);
-    const body = renderTemplate(template.bodyHtml ?? this.blocksToHtml(template.blocks), context as never);
+    const verificationCode = this.buildVerificationCode(
+      ctx.companyId,
+      input.employeeId ?? ctx.userId,
+    );
+    const body = renderTemplate(
+      template.bodyHtml ?? this.blocksToHtml(template.blocks),
+      context as never,
+    );
     const verifyUrl = `${(this.config.get<string>('env.WEB_URL') ?? '').replace(/\/$/, '')}/verificar/${verificationCode}`;
     const qr = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 160 });
 
@@ -297,7 +308,8 @@ export class DocumentsService {
 
   /** Simple signature: name, timestamp, IP and a content hash. */
   async acknowledgePolicy(ctx: RequestContext, versionId: string, sign: boolean) {
-    if (!ctx.employeeId) throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
+    if (!ctx.employeeId)
+      throw BusinessException.forbidden('Su usuario no esta vinculado a un colaborador');
     const db = this.prisma.forCompany(ctx.companyId);
     const version = await db.policyVersion.findFirst({
       where: { id: versionId },

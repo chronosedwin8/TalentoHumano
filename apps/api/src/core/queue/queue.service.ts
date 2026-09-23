@@ -44,7 +44,12 @@ export class QueueService implements OnModuleDestroy {
     this.handlers.set(`${queue}:${jobName}`, handler as JobHandler);
   }
 
-  async add<T>(queue: QueueName, jobName: string, payload: T, options?: { delayMs?: number }): Promise<void> {
+  async add<T>(
+    queue: QueueName,
+    jobName: string,
+    payload: T,
+    options?: { delayMs?: number },
+  ): Promise<void> {
     if (!this.enabled) {
       await this.runInline(queue, jobName, payload, options?.delayMs);
       return;
@@ -59,22 +64,27 @@ export class QueueService implements OnModuleDestroy {
         removeOnFail: 5000,
       });
     } catch (error) {
-      this.logger.error(`No se pudo encolar ${queue}:${jobName}: ${(error as Error).message}`);
+      this.logger.error(`Could not enqueue ${queue}:${jobName}: ${(error as Error).message}`);
       await this.runInline(queue, jobName, payload, 0);
     }
   }
 
-  private async runInline<T>(queue: string, jobName: string, payload: T, delayMs = 0): Promise<void> {
+  private async runInline<T>(
+    queue: string,
+    jobName: string,
+    payload: T,
+    delayMs = 0,
+  ): Promise<void> {
     const handler = this.handlers.get(`${queue}:${jobName}`);
     if (!handler) {
-      this.logger.debug(`Sin manejador para ${queue}:${jobName}; se omite`);
+      this.logger.debug(`No handler for ${queue}:${jobName}; skipping`);
       return;
     }
     const run = async () => {
       try {
         await handler(payload);
       } catch (error) {
-        this.logger.error(`Job ${queue}:${jobName} fallo: ${(error as Error).message}`);
+        this.logger.error(`Job ${queue}:${jobName} failed: ${(error as Error).message}`);
       }
     };
     if (delayMs > 0) {
@@ -106,7 +116,7 @@ export class QueueService implements OnModuleDestroy {
   /** Starts BullMQ workers for every registered handler (worker process). */
   async startWorkers(): Promise<void> {
     if (!this.enabled) {
-      this.logger.warn('Redis deshabilitado: los trabajos se ejecutan en proceso');
+      this.logger.warn('Redis disabled: jobs run inline');
       return;
     }
     const { Worker } = await import('bullmq');
@@ -123,10 +133,10 @@ export class QueueService implements OnModuleDestroy {
         { connection, concurrency: 5 },
       );
       worker.on('failed', (job: any, error: Error) =>
-        this.logger.error(`Job ${name}:${job?.name} fallo: ${error.message}`),
+        this.logger.error(`Job ${name}:${job?.name} failed: ${error.message}`),
       );
       this.workers.push(worker);
-      this.logger.log(`Worker activo para la cola "${name}"`);
+      this.logger.log(`Worker listening on queue "${name}"`);
     }
   }
 

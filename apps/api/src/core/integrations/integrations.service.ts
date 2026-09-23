@@ -22,10 +22,19 @@ export class IntegrationsService {
     private readonly queue: QueueService,
     private readonly encryption: EncryptionService,
   ) {
-    this.queue.register<WebhookJob>(QUEUES.WEBHOOKS, 'send', (job) => this.sendDelivery(job.deliveryId));
+    this.queue.register<WebhookJob>(QUEUES.WEBHOOKS, 'send', (job) =>
+      this.sendDelivery(job.deliveryId),
+    );
   }
 
-  /** Fans a domain event out to every webhook subscribed to it. */
+  /**
+   * Fans a domain event out to every webhook subscribed to it.
+   *
+   * `async: true` is deliberate here: the emitter dispatches and moves on, so a
+   * slow or unreachable third party never delays the response of the operation
+   * that triggered the event. Delivery and retries are tracked separately in
+   * `webhook_deliveries`.
+   */
   @OnEvent('**', { async: true })
   async onDomainEvent(payload: unknown, eventName?: string): Promise<void> {
     const event = eventName ?? (payload as { __event?: string })?.__event;
@@ -138,10 +147,7 @@ export class IntegrationsService {
     return key;
   }
 
-  async createWebhook(
-    companyId: string,
-    input: { name: string; url: string; events: string[] },
-  ) {
+  async createWebhook(companyId: string, input: { name: string; url: string; events: string[] }) {
     return this.prisma.webhook.create({
       data: {
         companyId,

@@ -14,7 +14,9 @@ import { NotificationsGateway } from '../../core/notifications/notifications.gat
  */
 export interface ChannelAdapter {
   kind: string;
-  inbound(payload: unknown): Promise<{ externalId: string; from: string; subject: string; body: string }>;
+  inbound(
+    payload: unknown,
+  ): Promise<{ externalId: string; from: string; subject: string; body: string }>;
   outbound(message: { to: string; subject: string; body: string }): Promise<void>;
 }
 
@@ -46,7 +48,10 @@ export class HelpdeskService {
     },
   ) {
     const db = this.prisma.forCompany(ctx.companyId);
-    const last = await db.ticket.findFirst({ orderBy: { number: 'desc' }, select: { number: true } });
+    const last = await db.ticket.findFirst({
+      orderBy: { number: 'desc' },
+      select: { number: true },
+    });
 
     const category = input.categoryId
       ? await db.ticketCategory.findFirst({
@@ -56,9 +61,7 @@ export class HelpdeskService {
       : null;
 
     const sla =
-      category?.slaPolicy ??
-      (await db.slaPolicy.findFirst({ where: { isDefault: true } })) ??
-      null;
+      category?.slaPolicy ?? (await db.slaPolicy.findFirst({ where: { isDefault: true } })) ?? null;
 
     const now = Date.now();
     const ticket = await db.ticket.create({
@@ -144,7 +147,11 @@ export class HelpdeskService {
     await db.ticket.update({
       where: { id: ticketId },
       data: {
-        status: isAgentReply ? 'pending_requester' : ticket.status === 'new' ? 'open' : ticket.status,
+        status: isAgentReply
+          ? 'pending_requester'
+          : ticket.status === 'new'
+            ? 'open'
+            : ticket.status,
         firstResponseAt:
           isAgentReply && !ticket.firstResponseAt ? new Date() : ticket.firstResponseAt,
       },
@@ -266,7 +273,9 @@ export class HelpdeskService {
       backlog,
       byStatus: byStatus.map((row) => ({ label: row.status, value: row._count._all })),
       byCategory: byCategory.map((row) => ({
-        label: row.categoryId ? (categoryName.get(row.categoryId) ?? 'Sin categoria') : 'Sin categoria',
+        label: row.categoryId
+          ? (categoryName.get(row.categoryId) ?? 'Sin categoria')
+          : 'Sin categoria',
         value: row._count._all,
       })),
       firstResponseHours: avg(

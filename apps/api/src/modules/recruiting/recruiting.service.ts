@@ -396,7 +396,10 @@ export class RecruitingService {
       where: { jobPostingId: application.jobPostingId, kind: 'rejected' },
     });
     if (rejectedStage) {
-      await db.application.update({ where: { id: applicationId }, data: { stageId: rejectedStage.id } });
+      await db.application.update({
+        where: { id: applicationId },
+        data: { stageId: rejectedStage.id },
+      });
     }
     await this.events.emitAsync(DOMAIN_EVENTS.APPLICATION_REJECTED, {
       companyId: ctx.companyId,
@@ -489,7 +492,10 @@ export class RecruitingService {
       where: { jobPostingId: application.jobPostingId, kind: 'hired' },
     });
     if (hiredStage) {
-      await db.application.update({ where: { id: applicationId }, data: { stageId: hiredStage.id } });
+      await db.application.update({
+        where: { id: applicationId },
+        data: { stageId: hiredStage.id },
+      });
     }
     await db.candidate.update({
       where: { id: candidate.id },

@@ -94,11 +94,12 @@ export class NotificationsService {
         }
 
         if (channels.includes('email')) {
-          const allowed = input.force || (await this.isEnabled(input.companyId, userId, input.eventKey, 'email'));
+          const allowed =
+            input.force || (await this.isEnabled(input.companyId, userId, input.eventKey, 'email'));
           if (allowed) await this.sendEmail(notification.id, userId, input, company);
         }
       } catch (error) {
-        this.logger.error(`No se pudo notificar al usuario ${userId}: ${(error as Error).message}`);
+        this.logger.error(`Could not notify user ${userId}: ${(error as Error).message}`);
       }
     }
   }
@@ -147,9 +148,7 @@ export class NotificationsService {
       url: input.url ? this.absoluteUrl(input.url) : '',
     };
 
-    const subject = template?.subject
-      ? renderTemplate(template.subject, variables)
-      : input.title;
+    const subject = template?.subject ? renderTemplate(template.subject, variables) : input.title;
     const bodyHtml = template?.body
       ? Handlebars.compile(template.body)(variables)
       : `<p>Hola ${user.firstName},</p><p>${input.body ?? input.title}</p>`;

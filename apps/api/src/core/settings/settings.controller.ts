@@ -1,12 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import {
-  CATALOG_LABELS,
-  MODULE_CATALOG,
-  MODULES,
-  PERMISSION_CATALOG,
-  uuid,
-} from '@talento/shared';
+import { CATALOG_LABELS, MODULE_CATALOG, MODULES, PERMISSION_CATALOG, uuid } from '@talento/shared';
 import { z } from 'zod';
 import { Audit, Ctx, RequireModule, RequirePermission } from '../../common/decorators';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe';
@@ -21,8 +15,14 @@ const companySettingsSchema = z.object({
   taxId: z.string().max(40).nullable().optional(),
   logoUrl: z.string().max(500).nullable().optional(),
   faviconUrl: z.string().max(500).nullable().optional(),
-  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  primaryColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional(),
   country: z.string().length(2).optional(),
   timezone: z.string().max(60).optional(),
   locale: z.enum(['es', 'en', 'de']).optional(),
@@ -40,7 +40,11 @@ const catalogItemSchema = z.object({
   code: z.string().trim().min(1).max(60),
   label: z.string().trim().min(1).max(200),
   description: z.string().max(500).nullable().optional(),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable()
+    .optional(),
   position: z.number().int().min(0).default(0),
   isActive: z.boolean().default(true),
   metadata: z.record(z.unknown()).default({}),
@@ -48,9 +52,21 @@ const catalogItemSchema = z.object({
 
 const customFieldSchema = z.object({
   entityType: z.enum(['employee', 'candidate', 'asset', 'ticket']),
-  key: z.string().trim().regex(/^[a-z][a-z0-9_]{1,59}$/, 'Use minusculas, numeros y guion bajo'),
+  key: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9_]{1,59}$/, 'Use minusculas, numeros y guion bajo'),
   label: z.string().trim().min(1).max(200),
-  fieldType: z.enum(['text', 'textarea', 'number', 'date', 'select', 'multiselect', 'boolean', 'file']),
+  fieldType: z.enum([
+    'text',
+    'textarea',
+    'number',
+    'date',
+    'select',
+    'multiselect',
+    'boolean',
+    'file',
+  ]),
   options: z.array(z.object({ value: z.string(), label: z.string() })).default([]),
   isRequired: z.boolean().default(false),
   isSensitive: z.boolean().default(false),
@@ -66,7 +82,13 @@ const moduleMatrixSchema = z.object({
     .array(z.object({ roleId: z.string().uuid(), moduleKey: z.string(), isVisible: z.boolean() }))
     .default([]),
   userModules: z
-    .array(z.object({ userId: z.string().uuid(), moduleKey: z.string(), isVisible: z.boolean().nullable() }))
+    .array(
+      z.object({
+        userId: z.string().uuid(),
+        moduleKey: z.string(),
+        isVisible: z.boolean().nullable(),
+      }),
+    )
     .default([]),
 });
 
@@ -101,7 +123,10 @@ export class SettingsController {
       where: { id: ctx.companyId },
       data: { ...defined(dto), updatedById: ctx.userId } as never,
     });
-    return { data: updated, meta: { changed: Object.keys(defined(dto)), previousName: before?.name } };
+    return {
+      data: updated,
+      meta: { changed: Object.keys(defined(dto)), previousName: before?.name },
+    };
   }
 
   /* ------------------------------ catalogs ------------------------------ */
@@ -157,7 +182,10 @@ export class SettingsController {
   @RequirePermission('settings.catalog.manage')
   @Audit({ entityType: 'catalog_item', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un elemento de catalogo' })
-  async removeCatalogItem(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeCatalogItem(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).catalogItem, id, ctx.userId);
   }
 
@@ -204,7 +232,10 @@ export class SettingsController {
   @RequirePermission('settings.customfield.manage')
   @Audit({ entityType: 'custom_field_definition', action: 'delete' })
   @ApiOperation({ summary: 'Elimina un campo personalizado' })
-  async removeCustomField(@Ctx() ctx: RequestContext, @Param('id', new ZodValidationPipe(uuid)) id: string) {
+  async removeCustomField(
+    @Ctx() ctx: RequestContext,
+    @Param('id', new ZodValidationPipe(uuid)) id: string,
+  ) {
     return softDelete(this.prisma.forCompany(ctx.companyId).customFieldDefinition, id, ctx.userId);
   }
 
@@ -291,7 +322,12 @@ export class SettingsController {
         where: {
           companyId_userId_moduleId: { companyId: ctx.companyId, userId: entry.userId, moduleId },
         },
-        create: { companyId: ctx.companyId, userId: entry.userId, moduleId, isVisible: entry.isVisible },
+        create: {
+          companyId: ctx.companyId,
+          userId: entry.userId,
+          moduleId,
+          isVisible: entry.isVisible,
+        },
         update: { isVisible: entry.isVisible },
       });
     }

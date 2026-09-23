@@ -46,7 +46,11 @@ export class BusinessException extends HttpException {
     );
   }
 
-  static conflict(message: string, code: ErrorCode | string = ERROR_CODES.CONFLICT, details?: unknown) {
+  static conflict(
+    message: string,
+    code: ErrorCode | string = ERROR_CODES.CONFLICT,
+    details?: unknown,
+  ) {
     return new BusinessException(code, message, HttpStatus.CONFLICT, details);
   }
 
@@ -59,7 +63,10 @@ export class BusinessException extends HttpException {
     );
   }
 
-  static unauthorized(code: ErrorCode | string = ERROR_CODES.UNAUTHENTICATED, message = 'Sesion invalida') {
+  static unauthorized(
+    code: ErrorCode | string = ERROR_CODES.UNAUTHENTICATED,
+    message = 'Sesion invalida',
+  ) {
     return new BusinessException(code, message, HttpStatus.UNAUTHORIZED);
   }
 }

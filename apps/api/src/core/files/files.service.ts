@@ -107,7 +107,13 @@ export class FilesService {
     });
   }
 
-  async link(companyId: string, fileId: string, entityType: string, entityId: string, role?: string) {
+  async link(
+    companyId: string,
+    fileId: string,
+    entityType: string,
+    entityId: string,
+    role?: string,
+  ) {
     return this.prisma.fileLink.create({
       data: { companyId, fileId, entityType, entityId, role: role ?? null },
     });
