@@ -94,6 +94,16 @@ sigue abierto esta en `docs/ACCEPTANCE.md` y en `PLAN.md`.
 - Tiempo: publicacion de turnos con aviso, exportacion CSV de asistencia y
   resumen de teletrabajo.
 
+### Pantallas
+
+- Entrevistas (agenda, programacion con entrevistadores, invitacion .ics,
+  tarjetas de evaluacion con modo ciego), ofertas (borrador, envio por correo
+  con enlace de respuesta) y ficha del candidato con sus postulaciones.
+- Tipos de ausencia y politicas de vacaciones, justificaciones de asistencia
+  con decision y exportacion CSV de la asistencia.
+- `pnpm --filter @talento/api run admin:create` crea una cuenta con acceso
+  total sin tocar la base de datos.
+
 ### Despliegue
 
 - **La imagen de la API no arrancaba** (`Cannot find module 'zod'`): el

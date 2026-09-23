@@ -202,7 +202,7 @@ principio a fin.
 | Lint y typecheck en pre-commit | Cumple: husky + lint-staged |
 | Cobertura >= 80% en logica critica | Cumple: 98.6% en `@talento/shared`, 100% en el cifrado ([ADR-0010](DECISIONS.md#adr-0010)) |
 | e2e de API por modulo con permisos y aislamiento | Cumple: 106 pruebas en 7 suites |
-| Playwright: ingreso, vacaciones, postulacion, marcacion, encuesta, denuncia | Cumple: 41 pruebas, escritorio y movil |
+| Playwright: ingreso, vacaciones, postulacion, marcacion, encuesta, denuncia | Cumple: 47 pruebas, escritorio y movil |
 | Prueba de carga basica con k6 | Cumple: `infra/load/` |
 
 ## Resumen de pruebas
@@ -211,7 +211,7 @@ principio a fin.
 |---|---|---|
 | Unitarias | 182 | pasan |
 | e2e de API | 106 | pasan |
-| Navegador | 41 | pasan |
+| Navegador | 47 | pasan |
 
 ## Internacionalizacion: la interfaz esta en espanol, el i18n no la cubre entera
 
@@ -254,10 +254,9 @@ tareas y aprobaciones. `PLAN.md` lista lo que sigue abierto por modulo.
 3. **Despliegue ejecutado en una EC2 limpia** de principio a fin (criterio 10).
 4. **Prueba e2e del ciclo 360**, que hoy no tiene cobertura automatizada.
 5. **Extraccion de textos a i18n** en las paginas que aun no lo usan.
-6. **Pantallas para funciones que ya tienen API** (ver `PLAN.md`): entrevistas
-   y ofertas, turnos y justificaciones, tipos de ausencia, procesos
-   disciplinarios, flujos de aprobacion y plantillas de notificacion, 1:1,
-   PDI, carrera y sucesion, eventos, tablero del jefe, preferencias de
-   notificacion, ficha 360 completa.
+6. **Pantallas para funciones que ya tienen API** (ver `PLAN.md`): turnos
+   con asignacion, procesos disciplinarios, flujos de aprobacion y plantillas
+   de notificacion, 1:1, PDI, carrera y sucesion, eventos, tablero del jefe,
+   preferencias de notificacion, ficha 360 completa.
 7. **Push PWA, SSO OIDC, H5P/xAPI, HLS** y la programacion de reportes desde
    la interfaz: sin implementar.

@@ -10,7 +10,7 @@ la evidencia de los diez criterios.
 | Fase | Alcance | Estado |
 |---|---|---|
 | 0 | Monorepo, base de datos, autenticacion, permisos, auditoria, cifrado, archivos, notificaciones, i18n, CI | Completa |
-| 1 | Personas y organizacion, legajo, movimientos, activos, importacion | Completa (importacion desde Excel el 23-09) |
+| 1 | Personas y organizacion, legajo, movimientos, activos, importacion | Completa en API (importacion desde Excel el 23-09); falta la pantalla de importacion |
 | 2 | Seleccion, onboarding y offboarding | Completa en API; ver pendientes de pantalla |
 | 3 | Ausencias, novedades, procesos, tiempo y asistencia | Completa en API; ver pendientes de pantalla |
 | 4 | Formacion (LMS) con editor de bloques, desempeno y OKR | Completa en API; ver pendientes |
@@ -25,9 +25,7 @@ API que ya existe y lo que falta encima.
 
 ### Seleccion
 
-- Pantallas de entrevistas y tarjetas de evaluacion (`GET/POST /recruiting/interviews`, `/scorecards`).
-- Pantalla de ofertas (`GET/POST /recruiting/offers`, `POST /offers/:id/send`).
-- Ficha del candidato (`GET /recruiting/candidates/:id`) y referidos (`/recruiting/referrals`).
+- Pantalla de referidos (`/recruiting/referrals`; la API ya acepta referir desde la sesion).
 - Configuracion de etapas y acciones masivas en el tablero.
 - Feed XML/JSON del portal de empleo y extraccion de texto de hojas de vida
   (`pdf-parse` y `mammoth` estan instalados y sin uso).
@@ -51,11 +49,10 @@ API que ya existe y lo que falta encima.
 
 ### Ausencias y tiempo
 
-- Administracion de tipos de ausencia y politicas (`/leaves/types`, `/leaves/policies`).
 - Turnos: asignacion, intercambios y publicacion desde `ShiftsPage`
   (`/time/shifts/*`, `/time/shifts/publish`).
-- Justificaciones (`/time/justifications`), geocercas, dispositivos e
-  importacion de marcaciones desde la interfaz.
+- Geocercas, dispositivos e importacion de marcaciones desde la interfaz;
+  el colaborador aun no crea justificaciones desde su asistencia.
 - Cobertura minima por area y sincronizacion ICS del calendario.
 
 ### Formacion y desempeno

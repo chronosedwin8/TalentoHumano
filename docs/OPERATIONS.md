@@ -59,7 +59,8 @@ La semilla base crea `superadmin@talento.local` (contrasena en
 tocar la base a mano:
 
 ```bash
-pnpm --filter @talento/api run admin:create -- \n  --email ana@empresa.com --password 'UnaClaveLarga!' --name "Ana Perez"
+pnpm --filter @talento/api run admin:create -- \
+  --email ana@empresa.com --password 'UnaClaveLarga!' --name "Ana Perez"
 ```
 
 El comando crea o promueve la cuenta como superadministradora y la hace
